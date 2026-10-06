@@ -1,5 +1,7 @@
 # 2025X-City_Hackathon_Learnicer
 
+[![CI](https://github.com/wjy-Jerry/2025X-City_Hackathon_Learnicer/actions/workflows/ci.yml/badge.svg)](https://github.com/wjy-Jerry/2025X-City_Hackathon_Learnicer/actions/workflows/ci.yml)
+
 A Flask-based backend with **Claude API 多模态一体化 Pipeline**（同时完成 OCR + 题目解析 + 动画指令生成），plus a lightweight front-end (HTML/CSS/JS) that renders solution steps and Canvas animations.
 
 ## Tech Stack
@@ -10,6 +12,17 @@ A Flask-based backend with **Claude API 多模态一体化 Pipeline**（同时�
 ## No-key browser demo
 
 Install dependencies with `pip install -r requirements.txt`, run `python app.py`, and open `http://127.0.0.1:5000/`. The page starts in **手动输入（无需 API Key）** mode. Click **填入示例题目**, then **解析文字并生成动画** to see the returned problem text, solution steps, and animation. This mode uses rule-based text parsing; it does **not** call OCR or Claude. No `.env` file or API key is required. Image upload remains available after configuring `CLAUDE_API_KEY`.
+
+## Tests and CI
+
+Install test dependencies with `python -m pip install -r requirements-dev.txt`, then run:
+
+```bash
+python -m pytest -q --cov=app --cov=routes.upload --cov=services.claude_pipeline --cov-report=term-missing
+node --test tests/browser/*.test.js
+```
+
+GitHub Actions runs these tests plus Python and JavaScript syntax checks on every push and pull request. It verifies the no-key manual upload, response contract, physics assumptions and warnings, and browser/renderer behavior. No paid API credential is used. See [supported tests and legacy exclusions](docs/testing.md); the historical `tools/test_ocr.py` is outside this CI suite.
 
 ## 📋 Table of Contents
 - [安全配置说明](#安全配置说明)

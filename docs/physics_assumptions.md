@@ -56,14 +56,11 @@ Explicit sample values in test pages and console fixtures are intentional exampl
 Run without an API key:
 
 ```bash
-python -m unittest discover -s tests -v
+python -m pip install -r requirements-dev.txt
+python -m pytest -q --cov=app --cov=routes.upload --cov=services.claude_pipeline --cov-report=term-missing
 node --test tests/browser/*.test.js
-# Start python app.py in a separate terminal, then:
-python scripts/test_upload_endpoint.py
-python scripts/test_frontend_integration.py  # Uses Node to execute the real adapter
+# Optional live-server diagnostic: start python app.py in a separate terminal, then:
 python scripts/self_check.py                # Live Claude test skips without a key
-python scripts/quick_test.py                # Legacy OCR regression
-python scripts/test_dynamic_response.py     # Legacy rule-based LLM regression
 ```
 
-`tools/test_ocr.py` has a pre-existing import failure (`get_ocr_provider`); it remains unchanged for the later legacy cleanup phase. Live Claude image recognition requires a key and is not part of no-key verification.
+The supported suite is described in [testing.md](testing.md). `scripts/quick_test.py` and `scripts/test_dynamic_response.py` cover legacy OCR/LLM behavior and are not CI gates. `tools/test_ocr.py` has a pre-existing import failure (`get_ocr_provider`); it remains unchanged for the later legacy cleanup phase. Live Claude image recognition requires a key and is not part of no-key verification.
