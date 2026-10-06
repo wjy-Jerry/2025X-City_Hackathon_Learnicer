@@ -1,19 +1,20 @@
 class UniformCircular extends AnimationBase {
   constructor(canvas, params) {
     super(canvas);
+    AnimationBase.validateParameters(params, ['radius', 'omega', 'mass', 'mu', 'g', 'initialAngle', 'duration'], ['radius', 'mass', 'g']);
     this.radius = params.radius;      // 半径 r
     this.omega = params.omega;        // 角速度 ω
     this.mass = params.mass;          // 质量 m
-    this.mu = params.mu || 0.5;       // 摩擦系数 μ (假设提供向心力)
-    this.g = params.g || 9.8;         // 重力加速度
-    this.center = { x: params.centerX || canvas.width / (2 * this.config.scale), y: params.centerY || canvas.height / (2 * this.config.scale) }; // 圆心
-    this.initialAngle = params.initialAngle || 0; // 初始角度
-    this.duration = params.duration || 10; // 总时长
+    this.mu = params.mu;
+    this.g = params.g;
+    this.center = { x: params.centerX ?? canvas.width / (2 * this.config.scale), y: params.centerY ?? canvas.height / (2 * this.config.scale) }; // 仅画布布局
+    this.initialAngle = params.initialAngle;
+    this.duration = params.duration;
     this.v = this.radius * this.omega; // 线速度 v = r ω
     this.centripetal = this.mass * this.v**2 / this.radius; // 向心力 Fc = m v^2 / r
     this.Fn = this.mass * this.g; // 支撑力 Fn = mg (假设水平圆周)
     this.f_max = this.mu * this.Fn; // 最大静摩擦力 f_max = μ Fn (提供向心力)
-    // 假设 f = Fc, 如果 f > f_max 则无法维持匀速圆周，但这里假设合适
+    if (this.centripetal > this.f_max) throw new Error('所需向心力超过最大摩擦力，无法播放此摩擦模型。');
     
     this.init();
   }
@@ -61,7 +62,7 @@ class UniformCircular extends AnimationBase {
     }
     
     // 如果有 duration, 结束
-    if (this.duration && this.time >= this.duration) {
+    if (this.time >= this.duration) {
       this.isEnded = true;
     }
     

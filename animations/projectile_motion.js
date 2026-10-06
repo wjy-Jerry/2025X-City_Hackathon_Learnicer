@@ -1,11 +1,12 @@
 class ProjectileMotion extends AnimationBase {
   constructor(canvas, params) {
     super(canvas);
-    this.v0 = params.v0 || 20;
+    AnimationBase.validateParameters(params, ['v0', 'angle', 'h0', 'g'], ['g']);
+    this.v0 = params.v0;
     this.angle = params.angle * Math.PI / 180;
-    this.h0 = params.h0 || 0;
-    this.g = params.g || 9.8;
-    this.mass = params.mass || 1;
+    this.h0 = params.h0;
+    this.g = params.g;
+    this.mass = params.mass ?? null;
     
     // 计算初速度分量
     this.vx0 = this.v0 * Math.cos(this.angle);

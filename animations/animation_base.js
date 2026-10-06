@@ -2,6 +2,28 @@
  * 动画基类
  */
 class AnimationBase {
+  static validateParameters(params, required, positive = []) {
+    for (const key of required) {
+      if (!Number.isFinite(params?.[key])) {
+        throw new Error(`缺少或无效的物理参数：${key}，未使用默认值。`);
+      }
+    }
+    for (const key of positive) {
+      if (!(params[key] > 0)) throw new Error(`${key} 必须大于零。`);
+    }
+    for (const key of ['v0', 'h0', 'duration', 'mu', 'F']) {
+      if (params[key] != null && (!Number.isFinite(params[key]) || params[key] < 0)) {
+        throw new Error(`${key} 必须为非负有限数值。`);
+      }
+    }
+    if (params.mass != null && (!Number.isFinite(params.mass) || params.mass <= 0)) {
+      throw new Error('mass 必须大于零；未知质量应留空。');
+    }
+    if (params.angle != null && (!Number.isFinite(params.angle) || params.angle < 0 || params.angle > 90)) {
+      throw new Error('当前抛体动画仅支持 0° 到 90°。');
+    }
+  }
+
   constructor(canvas, config = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
@@ -46,11 +68,12 @@ class AnimationBase {
   
   calcDynamicScale() {
     // 子类需设置 this.maxRangeX, this.maxRangeY (如射程和高度)
-    if (this.maxRangeX && this.maxRangeY) {
+    if (Number.isFinite(this.maxRangeX) && Number.isFinite(this.maxRangeY)) {
       const padding = this.boundaryPadding;
       this.config.scale = Math.min(
-        (this.canvas.width - padding * 2) / this.maxRangeX,
-        (this.canvas.height - padding * 2) / this.maxRangeY
+        (this.canvas.width - padding * 2) / Math.max(this.maxRangeX, 1),
+        (this.canvas.height - padding * 2) / Math.max(this.maxRangeY, 1),
+        50
       );
     }
   }
@@ -227,7 +250,8 @@ drawCoordinates() {
   drawForces() {
     this.objects.forEach(obj => {
       // 修改：假设主要力是重力 G = mg，绘制重力向量
-      const gravityForce = (this.g || 0) * (obj.mass || 0);  // 修改：处理无 g 情况，如匀速 g=0
+      if (!Number.isFinite(this.g) || !Number.isFinite(obj.mass)) return;
+      const gravityForce = this.g * obj.mass;
       this.drawVector(
         obj.position.x,
         obj.position.y,
@@ -309,7 +333,8 @@ drawCoordinates() {
     const v = obj.velocity ? Math.sqrt(obj.velocity.x**2 + obj.velocity.y**2).toFixed(2) : 'N/A';
     const vx = obj.velocity ? obj.velocity.x.toFixed(2) : 'N/A';
     const vy = obj.velocity ? obj.velocity.y.toFixed(2) : 'N/A';
-    const gForce = ((this.g || 0) * (obj.mass || 0)).toFixed(2);  // 修改：处理无 g，如匀速为0
+    const gForce = Number.isFinite(this.g) && Number.isFinite(obj.mass)
+      ? (this.g * obj.mass).toFixed(2) : 'N/A';
     // 如果有其他力，添加
     return { v, vx, vy, gForce };
   }
@@ -365,7 +390,7 @@ drawCoordinates() {
     this.draw();
     
     // 新增：更新物理面板
-    updatePhysicsPanel(this);
+    if (typeof updatePhysicsPanel === 'function') updatePhysicsPanel(this);
     
     // 只有在运动未结束时才增加时间
     if (!this.isEnded) {

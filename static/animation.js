@@ -58,106 +58,52 @@ class AnimationEngine {
    * }
    */
   static normalizePayload(raw) {
-    if (!raw) return null;
-
-    // 如果是数组，使用默认抛体运动示例
-    if (Array.isArray(raw)) {
-      return {
-        sub_type: 'projectile_motion',
-        parameters: {
-          v0: 18,
-          angle: 55,
-          g: 9.8,
-          h0: 0,
-          mass: 1
-        }
-      };
-    }
-
-    // 如果已经是新格式（包含 sub_type 和 parameters），直接返回
-    if (raw.sub_type && raw.parameters) {
-      return raw;
-    }
-
-    // 如果嵌套在 animation 字段中
-    if (raw.animation) {
-      return AnimationEngine.normalizePayload(raw.animation);
-    }
-
-    // 旧格式转新格式的映射逻辑
-    // 优先使用 motion_type_original，其次使用 type
-    const motionType = raw.motion_type_original || raw.type || 'projectile';
-
-    // 提取通用参数
-    const v0 = raw.initial_speed !== undefined ? raw.initial_speed : (raw.v0 !== undefined ? raw.v0 : 20);
-    const angle = raw.angle !== undefined ? raw.angle : 45;
-    const g = raw.gravity !== undefined ? raw.gravity : (raw.g !== undefined ? raw.g : 9.8);
-    const h0 = raw.initial_y !== undefined ? raw.initial_y : (raw.y0 !== undefined ? raw.y0 : (raw.h0 !== undefined ? raw.h0 : 0));
-    const mass = raw.mass !== undefined ? raw.mass : 1;
-    const duration = raw.duration !== undefined ? raw.duration : 10;
-
-    // 映射到 PhysicsVisualizer 支持的类型并构建对应参数
-    let subType, parameters;
-
-    if (motionType === 'free_fall') {
-      subType = 'free_fall';
-      parameters = {
-        h0: h0 || 10,  // 自由落体默认高度
-        g: g,
-        mass: mass,
-        bounce: raw.bounce || false,
-        bounceLoss: raw.bounceLoss || 0.8
-      };
-    } else if (motionType === 'uniform') {
-      subType = 'uniform';
-      // Uniform 需要 vx, vy 而不是 v0, angle
-      const angleRad = (angle || 0) * Math.PI / 180;
-      parameters = {
-        vx: v0 * Math.cos(angleRad),
-        vy: v0 * Math.sin(angleRad),
-        x0: raw.initial_x !== undefined ? raw.initial_x : 0,
-        y0: h0,
-        mass: mass,
-        duration: duration,
-        g: 0  // 匀速运动无重力影响
-      };
-    } else if (motionType === 'uniform_acceleration') {
-      subType = 'uniform_acceleration';
-      parameters = {
-        F: raw.F !== undefined ? raw.F : 10,  // 拉力
-        mu: raw.mu !== undefined ? raw.mu : 0.2,  // 摩擦系数
-        mass: mass,
-        g: g,
-        x0: raw.initial_x !== undefined ? raw.initial_x : 0,
-        v0: v0,
-        duration: duration
-      };
-    } else if (motionType === 'uniform_circular') {
-      subType = 'uniform_circular';
-      parameters = {
-        radius: raw.radius !== undefined ? raw.radius : 5,  // 半径
-        omega: raw.omega !== undefined ? raw.omega : 1,  // 角速度
-        mass: mass,
-        mu: raw.mu !== undefined ? raw.mu : 0.5,
-        g: g,
-        duration: duration
-      };
-    } else {
-      // horizontal_projectile, vertical_throw, projectile 都映射为 projectile_motion
-      subType = 'projectile_motion';
-      parameters = {
-        v0: v0,
-        angle: angle,
-        g: g,
-        h0: h0,
-        mass: mass
-      };
-    }
-
-    return {
-      sub_type: subType,
-      parameters: parameters
+    if (raw == null) return null;
+    if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error('动画必须为参数对象，不能用示例替代。');
+    if (raw.animation) return AnimationEngine.normalizePayload(raw.animation);
+    const type = raw.sub_type ?? raw.motion_type_original ?? raw.type;
+    const aliases = { projectile: 'projectile_motion', horizontal_projectile: 'projectile_motion', vertical_throw: 'projectile_motion' };
+    const subType = aliases[type] ?? type;
+    const required = {
+      projectile_motion: ['v0', 'angle', 'g', 'h0'],
+      free_fall: ['h0', 'g'],
+      uniform: ['vx', 'vy', 'x0', 'y0', 'duration'],
+      uniform_acceleration: ['F', 'mu', 'mass', 'g', 'x0', 'v0', 'duration'],
+      uniform_circular: ['radius', 'omega', 'mass', 'mu', 'g', 'initialAngle', 'duration'],
     };
+    if (!required[subType]) throw new Error(`不支持的运动类型：${type ?? '未指定'}。`);
+    let parameters;
+    if (raw.sub_type) {
+      parameters = { ...raw.parameters };
+      if (subType === 'free_fall') parameters.h0 = parameters.h0 ?? parameters.height;
+    } else {
+      const v0 = raw.initial_speed ?? raw.v0;
+      const angle = raw.angle;
+      const g = raw.gravity ?? raw.g;
+      const h0 = raw.initial_y ?? raw.y0 ?? raw.h0;
+      parameters = { v0, angle, g, h0, mass: raw.mass ?? null, duration: raw.duration };
+      if (subType === 'free_fall') {
+        parameters.bounce = raw.bounce === true;
+        parameters.bounceLoss = raw.bounceLoss;
+      } else if (subType === 'uniform') {
+        AnimationBase.validateParameters({ v0, angle }, ['v0', 'angle']);
+        parameters.vx = v0 * Math.cos(angle * Math.PI / 180);
+        parameters.vy = v0 * Math.sin(angle * Math.PI / 180);
+        parameters.x0 = raw.initial_x ?? 0; // Coordinate origin, not an invented travel distance.
+        parameters.y0 = h0;
+      } else if (subType === 'uniform_acceleration') {
+        Object.assign(parameters, { F: raw.F, mu: raw.mu, x0: raw.initial_x ?? 0 });
+      } else if (subType === 'uniform_circular') {
+        Object.assign(parameters, { radius: raw.radius, omega: raw.omega, mu: raw.mu,
+          initialAngle: raw.initialAngle, centerX: raw.centerX, centerY: raw.centerY });
+      }
+    }
+    AnimationBase.validateParameters(parameters, required[subType],
+      subType === 'uniform' ? [] : subType === 'uniform_circular' ? ['g', 'mass', 'radius'] : ['g']);
+    if (subType === 'free_fall' && parameters.v0 != null && parameters.v0 !== 0) {
+      throw new Error('自由落体必须从静止释放。');
+    }
+    return { sub_type: subType, parameters, scale: raw.scale };
   }
 
   /**

@@ -1,13 +1,14 @@
 class UniformAcceleration extends AnimationBase {
   constructor(canvas, params) {
     super(canvas);
+    AnimationBase.validateParameters(params, ['F', 'mu', 'mass', 'g', 'x0', 'v0', 'duration'], ['mass', 'g']);
     this.F = params.F;        // 拉力 F
     this.mu = params.mu;      // 摩擦系数 μ
     this.mass = params.mass;  // 质量 m
-    this.g = params.g || 9.8; // 重力加速度
-    this.x0 = params.x0 || 0; // 初始 x
-    this.v0 = params.v0 || 0; // 初速度
-    this.duration = params.duration || 10; // 总时长
+    this.g = params.g;
+    this.x0 = params.x0;
+    this.v0 = params.v0;
+    this.duration = params.duration;
     this.Fn = this.mass * this.g; // 支撑力 Fn = mg (假设水平地面)
     this.f = this.mu * this.Fn;   // 摩擦力 f = μ * Fn
     this.a = (this.F - this.f) / this.mass; // 加速度 a = (F - f)/m
@@ -51,7 +52,7 @@ class UniformAcceleration extends AnimationBase {
     }
     
     // 如果有 duration, 结束
-    if (this.duration && this.time >= this.duration) {
+    if (this.time >= this.duration) {
       this.isEnded = true;
     }
     

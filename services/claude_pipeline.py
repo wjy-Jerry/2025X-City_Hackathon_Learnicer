@@ -65,67 +65,28 @@ CLAUDE_SYSTEM_PROMPT = """你是一个物理题 OCR + 解析专家。你的任�
 2. **题型识别**：判断运动类型（平抛、自由落体、竖直上抛、斜抛、匀速直线、斜面等）
 3. **参数提取**：提取关键物理参数（初速度、角度、高度、重力加速度、摩擦系数等）
 4. **解题步骤**：生成清晰的解题步骤（至少 3 步）
-5. **动画指令**：输出符合前端动画引擎的 JSON 格式
+5. **证据**：每个参数必须附上题干原文；不得补充未给出的物理值或动画参数
 
 **CRITICAL：你必须只返回纯 JSON，不要包含任何 Markdown 代码块标记（如 ```json），不要有任何解释性文字。**
 """
 
-CLAUDE_USER_PROMPT = """请从图片中识别物理题目，并按以下 JSON 格式返回（不要包含 ```json 等标记）：
-
+CLAUDE_USER_PROMPT = """识别物理题并返回纯 JSON：
 {
-  "problem_text": "OCR 提取的完整题目文字",
-  "problem_type": "运动类型（可选值见下方）",
+  "problem_text": "完整题目文字",
+  "problem_type": "projectile/horizontal_projectile/free_fall/vertical_throw/uniform/inclined_plane/unknown",
   "parameters": {
-    "initial_speed": 初速度（m/s，可为 null），
-    "angle": 角度（度，可为 null），
-    "initial_height": 初始高度（m，可为 null），
-    "gravity": 重力加速度（m/s²，默认 9.8），
-    "friction": 摩擦系数（可为 null）
+    "initial_speed": null, "angle": null, "initial_height": null,
+    "gravity": null, "mass": null, "duration": null, "friction": null
   },
-  "solution_steps": [
-    "步骤1：识别题干和运动类型",
-    "步骤2：列出已知条件和待求量",
-    "步骤3：应用物理公式求解",
-    "步骤4：（可选）验证结果的合理性"
-  ],
-  "animation_instructions": {
-    "type": "动画类型（projectile/uniform/free_fall/inclined_plane）",
-    "initial_speed": 初速度（同上），
-    "angle": 角度（同上），
-    "gravity": 重力加速度（同上），
-    "initial_x": 0,
-    "initial_y": 初始高度（同上），
-    "duration": 持续时间（秒，自动计算或估算），
-    "scale": 缩放比例（10-30 之间，确保动画可见）
-  }
+  "parameter_evidence": {"initial_speed": "题目中包含该数值和单位的原文片段"},
+  "solution_steps": [],
+  "warnings": []
 }
-
-**运动类型判别规则：**
-- projectile: 一般抛体运动（任意角度，有初速度）
-- horizontal_projectile: 平抛运动（角度=0 或水平抛出）
-- free_fall: 自由落体（初速度=0，垂直下落）
-- vertical_throw: 竖直上抛（角度=90，竖直向上）
-- uniform: 匀速直线运动
-- inclined_plane: 斜面运动
-
-**动画类型映射：**
-- projectile → type="projectile"
-- horizontal_projectile → type="projectile"（angle=0）
-- free_fall → type="free_fall"
-- vertical_throw → type="projectile"（angle=90）
-- uniform → type="uniform"
-- inclined_plane → type="inclined_plane"
-
-**参数提取要求：**
-- 如果题目中没有明确给出某个参数，设为 null
-- 角度用度数表示（0-360）
-- 平抛运动的角度为 0
-- 自由落体的初速度为 0
-- 持续时间 duration：根据运动学公式估算，确保物体完成完整运动（落地或到达终点）
-- 缩放比例 scale：10-30 之间，确保动画在画布中可见
-
-现在请开始识别图片中的物理题目，只返回 JSON："""
-
+只提取题目明确给出的参数，不得补充速度、角度、重力、高度、质量或时长。
+未给出的参数必须为 null。每个数值必须有 parameter_evidence 原文证据。
+无法确定题型时返回 unknown。不要伪造解题结果；缺少必要条件时说明缺失。
+后端将单独验证参数、记录假设并计算动画，勿自行生成动画参数。
+"""
 
 def encode_image_to_base64(image_source: Union[str, bytes, Path]) -> tuple[str, str]:
     """将图片编码为 base64
@@ -198,153 +159,65 @@ def clean_json_response(text: str) -> str:
     return text.strip()
 
 
+def is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
 def validate_and_normalize_response(data: dict) -> dict:
-    """校验并规范化 Claude 返回的 JSON
-
-    Args:
-        data: Claude 返回的原始 dict
-
-    Returns:
-        规范化后的 dict
-
-    Raises:
-        ValueError: 数据格式不符合要求
-    """
-    # 必需字段
-    if "problem_text" not in data or not data["problem_text"]:
+    """Validate extracted values; never trust model-supplied animation defaults."""
+    if not isinstance(data, dict) or not isinstance(data.get("problem_text"), str) or not data["problem_text"].strip():
         raise ValueError("缺少 problem_text 字段或为空")
-
-    # 默认值
-    if "problem_type" not in data or not data["problem_type"]:
-        logger.warning("缺少 problem_type，使用默认值 projectile")
-        data["problem_type"] = "projectile"
-
-    if "parameters" not in data or not isinstance(data["parameters"], dict):
-        logger.warning("缺少 parameters，使用空字典")
-        data["parameters"] = {}
-
-    if "solution_steps" not in data or not isinstance(data["solution_steps"], list):
-        logger.warning("缺少 solution_steps，使用默认值")
-        data["solution_steps"] = [
-            "步骤1：识别题干和运动类型",
-            "步骤2：列出已知条件",
-            "步骤3：应用物理公式求解"
-        ]
-
-    if "animation_instructions" not in data or not isinstance(data["animation_instructions"], dict):
-        logger.warning("缺少 animation_instructions，将自动生成")
-        data["animation_instructions"] = {}
-
-    # 规范化 animation_instructions
-    anim = data["animation_instructions"]
-    if "type" not in anim:
-        # 根据 problem_type 推断 type
-        problem_type = data["problem_type"]
-        if "uniform" in problem_type:
-            anim["type"] = "uniform"
-        elif "inclined" in problem_type or "slope" in problem_type:
-            anim["type"] = "inclined_plane"
-        elif "free_fall" in problem_type:
-            anim["type"] = "free_fall"
+    text = data["problem_text"].strip()
+    params = extract_parameters(text)
+    warnings = [w for w in data.get("warnings", []) if isinstance(w, str)] if isinstance(data.get("warnings"), list) else []
+    evidence = data.get("parameter_evidence", {})
+    evidence = evidence if isinstance(evidence, dict) else {}
+    supplied = data.get("parameters", {})
+    supplied = supplied if isinstance(supplied, dict) else {}
+    for key in params:
+        value = supplied.get(key)
+        if value is None:
+            continue
+        if params[key] is not None:
+            if value != params[key]:
+                warnings.append(f"{key} 的模型值与题干数值不一致，使用题干中提取的数值。")
+            continue
+        quote = evidence.get(key)
+        if is_number(value) and isinstance(quote, str) and quote in text and extract_parameters(quote).get(key) == value:
+            params[key] = value
         else:
-            anim["type"] = "projectile"
-
-    # 确保必要的动画参数
-    params = data["parameters"]
-    if "initial_speed" not in anim:
-        anim["initial_speed"] = params.get("initial_speed", 10.0)
-    if "angle" not in anim:
-        anim["angle"] = params.get("angle", 45)
-    if "gravity" not in anim:
-        anim["gravity"] = params.get("gravity", 9.8)
-    if "initial_x" not in anim:
-        anim["initial_x"] = 0
-    if "initial_y" not in anim:
-        anim["initial_y"] = params.get("initial_height", 0)
-
-    # 计算持续时间（如果缺失）
-    if "duration" not in anim or not anim["duration"]:
-        anim["duration"] = estimate_duration(
-            anim["type"],
-            anim["initial_speed"],
-            anim["angle"],
-            anim["gravity"],
-            anim["initial_y"]
-        )
-
-    # 计算缩放比例（如果缺失）
-    if "scale" not in anim or not anim["scale"]:
-        anim["scale"] = estimate_scale(
-            anim["type"],
-            anim["initial_speed"],
-            anim["angle"],
-            anim["gravity"],
-            anim["initial_y"]
-        )
-
-    logger.info("✅ 响应数据校验通过")
-    return data
+            warnings.append(f"{key} 缺少可核对的题干证据，未采用模型提供的数值。")
+    motion_type = data.get("problem_type") or "unknown"
+    detected = detect_motion_type(text)
+    if detected != "unknown" and motion_type != detected:
+        warnings.append("模型题型与题干识别出的运动类型不一致，请确认题目；未生成动画。")
+        motion_type = detected
+    result = build_physics_result(text, motion_type, params, warnings)
+    if result["animation_instructions"] is not None and isinstance(data.get("solution_steps"), list):
+        steps = [s for s in data["solution_steps"] if isinstance(s, str)]
+        # Model solutions may rely on unstated assumptions; retain them only for fully specified input.
+        if steps and not result["assumptions"]:
+            result["solution_steps"] = steps
+    return result
 
 
 def estimate_duration(motion_type: str, v0: float, angle: float, g: float, h0: float) -> float:
-    """估算运动持续时间（秒）"""
-    if g <= 0:
-        g = 9.8
-    if v0 is None:
-        v0 = 10.0
-    if angle is None:
-        angle = 45
-    if h0 is None:
-        h0 = 0
-
-    if motion_type == "uniform":
-        return 5.0
-
+    """Derive flight time only from validated inputs, including valid zero values."""
     if motion_type == "free_fall":
-        # t = sqrt(2h/g)
-        if h0 > 0:
-            return math.sqrt(2 * h0 / g)
-        return 2.0
-
-    # 抛体运动：求解 y(t) = h0 + vy0*t - 0.5*g*t^2 = 0
-    angle_rad = math.radians(angle)
-    vy0 = v0 * math.sin(angle_rad)
-
-    discriminant = vy0 * vy0 + 2 * g * h0
-    if discriminant < 0:
-        return 2.0
-
-    t = (vy0 + math.sqrt(discriminant)) / g
-    return max(t, 0.5)
+        return math.sqrt(2 * h0 / g)
+    vy0 = v0 * math.sin(math.radians(angle))
+    return (vy0 + math.sqrt(vy0 * vy0 + 2 * g * h0)) / g
 
 
-def estimate_scale(motion_type: str, v0: float, angle: float, g: float, h0: float) -> float:
-    """估算缩放比例（10-30）"""
-    if g <= 0:
-        g = 9.8
-    if v0 is None:
-        v0 = 10.0
-    if angle is None:
-        angle = 45
-    if h0 is None:
-        h0 = 0
-
+def estimate_scale(motion_type: str, v0: float, angle: float, g: float, h0: float, duration: float) -> float:
+    """Visual scale has no effect on physical values."""
     if motion_type == "uniform":
-        return 20.0
-
-    # 计算最大范围和高度
-    angle_rad = math.radians(angle)
-    max_range = v0 * v0 * abs(math.sin(2 * angle_rad)) / g if v0 > 0 else 10
-    max_height = h0 + (v0 * math.sin(angle_rad)) ** 2 / (2 * g) if v0 > 0 else h0
-
-    # Canvas 默认大小约 800x600，留边距
-    scale_x = 700 / max(max_range, 1)
-    scale_y = 500 / max(max_height, 1)
-    scale = min(scale_x, scale_y, 30)
-    scale = max(scale, 10)
-
-    return scale
-
+        extent_x = abs(v0 * math.cos(math.radians(angle)) * duration)
+        extent_y = h0 + abs(v0 * math.sin(math.radians(angle)) * duration)
+        return min(620 / max(extent_x, 1), 320 / max(extent_y, 1), 30)
+    extent_x = abs(v0 * math.cos(math.radians(angle)) * duration)
+    extent_y = h0 + max(v0 * math.sin(math.radians(angle)), 0) ** 2 / (2 * g)
+    return min(620 / max(extent_x, 1), 320 / max(extent_y, 1), 30)
 
 def call_claude_pipeline(image_source: Union[str, bytes, Path]) -> dict:
     """调用 Claude 多模态 API 完成 OCR + 解析 + 动画指令生成
@@ -358,7 +231,9 @@ def call_claude_pipeline(image_source: Union[str, bytes, Path]) -> dict:
             "problem_type": str,
             "parameters": dict,
             "solution_steps": list[str],
-            "animation_instructions": dict
+            "animation_instructions": dict | None,
+            "assumptions": list[dict],
+            "warnings": list[str]
         }
 
     Raises:
@@ -434,42 +309,18 @@ def call_claude_pipeline(image_source: Union[str, bytes, Path]) -> dict:
 # ==================== Manual 模式（降级方案） ====================
 
 def manual_pipeline(manual_text: str) -> dict:
-    """Manual 模式：直接解析文本（无 OCR）
-
-    Args:
-        manual_text: 用户提供的题目文本
-
-    Returns:
-        同 call_claude_pipeline 的返回格式
-    """
+    """Rule-based parsing; unavailable parameters stay unknown."""
     if not manual_text or not manual_text.strip():
         raise ValueError("manual_text 不能为空")
-
-    logger.info(f"✅ [Manual Mode] 使用手动输入文本（{len(manual_text)} 字符）")
-
-    # 使用规则引擎解析
-    problem_type = detect_motion_type(manual_text)
-    params = extract_parameters(manual_text)
-
-    # 生成解题步骤
-    solution_steps = generate_solution_steps(problem_type, params, manual_text)
-
-    # 生成动画指令
-    animation_instructions = generate_animation_instructions(problem_type, params)
-
-    return {
-        "problem_text": manual_text.strip(),
-        "problem_type": problem_type,
-        "parameters": params,
-        "solution_steps": solution_steps,
-        "animation_instructions": animation_instructions,
-    }
-
+    text = manual_text.strip()
+    return build_physics_result(text, detect_motion_type(text), extract_parameters(text))
 
 def detect_motion_type(text: str) -> str:
     """规则引擎：检测运动类型"""
+    if any(kw in text for kw in ["圆周", "匀加速", "匀减速"]):
+        return "unknown"  # These are not supported by the active parser.
     # 检查匀速直线运动
-    if "匀速" in text or "匀速直线" in text:
+    if "匀速" in text and "圆周" not in text:
         return "uniform"
 
     # 检查自由落体
@@ -507,177 +358,166 @@ def detect_motion_type(text: str) -> str:
     if "抛" in text or "弹道" in text or "抛体" in text:
         return "projectile"
 
-    # 默认
-    return "projectile"
+    # 无法识别时不伪造题型
+    return "unknown"
 
 
 def extract_parameters(text: str) -> dict:
-    """规则引擎：提取参数"""
-    def match_number(patterns):
+    """Extract explicit values only; zero is never treated as missing."""
+    number = r"(?<![\deE.+/-])([-+]?\d+(?:\.\d+)?)(?![\deE.]|[,/]\d)"
+    def find(patterns):
         for pattern in patterns:
-            m = re.search(pattern, text, re.IGNORECASE)
-            if m:
-                try:
-                    return float(m.group(1))
-                except ValueError:
-                    continue
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return float(match.group(1))
         return None
-
-    speed = match_number([
-        r"初速度\s*[:：=]?\s*([0-9]+(?:\.[0-9]+)?)",
-        r"v0?\s*[:：=]?\s*([0-9]+(?:\.[0-9]+)?)",
-        r"速度\s*[:：=]?\s*([0-9]+(?:\.[0-9]+)?)\s*(?:m/s|米/秒)?",
-        r"以\s*([0-9]+(?:\.[0-9]+)?)\s*m/s",
-        r"([0-9]+(?:\.[0-9]+)?)\s*m/s\s*的.*速度",
-    ])
-
-    angle = match_number([
-        r"角度\s*[:：=]?\s*([0-9]+(?:\.[0-9]+)?)",
-        r"([0-9]+(?:\.[0-9]+)?)\s*[°度]\s*角",
-        r"以\s*([0-9]+(?:\.[0-9]+)?)\s*[°度]",
-    ])
-
-    height = match_number([
-        r"高度\s*(?:为|是|[:：])\s*([0-9]+(?:\.[0-9]+)?)",
-        r"从\s*([0-9]+(?:\.[0-9]+)?)\s*[米m]",
-        r"高\s*([0-9]+(?:\.[0-9]+)?)\s*[米m]",
-        r"([0-9]+(?:\.[0-9]+)?)\s*米高",
-        r"([0-9]+(?:\.[0-9]+)?)\s*m高",
-    ])
-
-    gravity = match_number([
-        r"g\s*[:：=]?\s*([0-9]+(?:\.[0-9]+)?)",
-        r"重力加速度\s*(?:为|是|[:：])\s*([0-9]+(?:\.[0-9]+)?)",
-    ]) or 9.8
-
-    friction = match_number([
-        r"摩擦系数\s*[:：=]?\s*([0-9]+(?:\.[0-9]+)?)",
-        r"μ\s*[:：=]?\s*([0-9]+(?:\.[0-9]+)?)",
-    ])
-
     return {
-        "initial_speed": speed,
-        "angle": angle,
-        "initial_height": height,
-        "gravity": gravity,
-        "friction": friction,
+        "initial_speed": find([
+            r"(?:初速度|初始速度)\s*(?:为|是|[:：=])?\s*" + number,
+            r"\bv0\s*[:：=]\s*" + number,
+            r"以\s*" + number + r"\s*(?:m/s|米/秒)(?!\s*的(?:落地|末|最终)速度)",
+            number + r"\s*(?:m/s|米/秒)\s*的\s*初速度",
+        ]),
+        "angle": find([r"(?:角度|angle)\s*[:：=]?\s*" + number, number + r"\s*[°度]"]),
+        "initial_height": find([
+            r"(?:初始高度|高度|h0)\s*(?:为|是|[:：=])?\s*" + number,
+            r"从\s*" + number + r"\s*(?:米|m)(?!/|／)",
+            r"高\s*" + number + r"\s*(?:米|m)(?!/|／)",
+            number + r"\s*(?:米|m)高",
+        ]),
+        "gravity": find([r"\bg\s*[:：=]?\s*" + number, r"重力加速度\s*(?:为|是|[:：=])?\s*" + number]),
+        "mass": find([r"质量\s*(?:为|是|[:：=])?\s*" + number, r"\bm\s*=\s*" + number]),
+        "duration": find([r"(?:持续时间|运动时间|duration)\s*(?:为|是|[:：=])?\s*" + number, r"运动\s*" + number + r"\s*(?:秒|s\b)"]),
+        "friction": find([r"摩擦系数\s*[:：=]?\s*" + number, r"μ\s*[:：=]?\s*" + number]),
     }
 
+def generate_solution_steps(motion_type: str, params: dict, text: str) -> list:
+    names = {"horizontal_projectile": "平抛运动", "free_fall": "自由落体", "vertical_throw": "竖直上抛", "uniform": "匀速直线", "projectile": "抛体运动", "inclined_plane": "斜面运动"}
+    known = ", ".join(f"{key}={value}" for key, value in params.items() if value is not None)
+    return [f"解析题干：{text}", f"识别运动类型：{names.get(motion_type, '未确定')}", f"明确给出的参数：{known or '无'}"]
 
-def generate_solution_steps(motion_type: str, params: dict, text_preview: str) -> list:
-    """生成解题步骤"""
-    type_names = {
-        "horizontal_projectile": "平抛运动",
-        "free_fall": "自由落体运动",
-        "vertical_throw": "竖直上抛运动",
-        "uniform": "匀速直线运动",
-        "projectile": "抛体运动",
-        "inclined_plane": "斜面运动",
+
+def build_physics_result(text: str, motion_type: str, extracted: dict, warnings=None) -> dict:
+    params = dict(extracted)
+    warnings = list(warnings or [])
+    assumptions = []
+    if not isinstance(motion_type, str):
+        motion_type = "unknown"
+        warnings.append("运动类型必须是字符串；未生成动画。")
+    steps = generate_solution_steps(motion_type, params, text)
+    supported = {"horizontal_projectile", "vertical_throw", "projectile", "free_fall", "uniform"}
+    # A supplied value in unsupported notation is not an absent value. In
+    # particular, never read the denominator/exponent as a separate number.
+    unsupported_number = r"(?<![\deE.+/-])[-+]?(?:\d+(?:\.\d+)?\s*(?:/\s*\d+(?:\.\d+)?|[eE][-+]?\d+)|\.\d+)"
+    labels = {
+        "initial_speed": r"(?:初速度|初始速度|\bv0\b)",
+        "angle": r"(?:角度|angle)",
+        "initial_height": r"(?:初始高度|高度|\bh0\b)",
+        "gravity": r"(?:重力加速度|\bg\b)",
+        "mass": r"(?:质量|\bm\b)",
+        "duration": r"(?:持续时间|运动时间|duration)",
+        "friction": r"(?:摩擦系数|μ)",
     }
+    invalid_explicit = set()
+    for key, label in labels.items():
+        if re.search(label + r"\s*(?:为|是|[:：=])?\s*" + unsupported_number, text, re.IGNORECASE):
+            invalid_explicit.add(key)
+    for key, prefix, suffix in [
+        ("initial_speed", r"以\s*", r"\s*(?:m/s|米/秒)"),
+        ("angle", "", r"\s*[°度]"),
+        ("initial_height", r"(?:从|高)\s*", r"\s*(?:米|m)(?!/|／)"),
+        ("duration", r"运动\s*", r"\s*(?:秒|s\b)"),
+    ]:
+        if re.search(prefix + unsupported_number + suffix, text, re.IGNORECASE):
+            invalid_explicit.add(key)
+    for key in sorted(invalid_explicit):
+        warnings.append(f"无法解析明确给出的 {key}；请使用十进制数值（例如 0.5），不会以默认值替换。")
+    def assume(key, value, reason):
+        if params.get(key) is None and key not in invalid_explicit:
+            params[key] = value
+            assumptions.append({"parameter": key, "value": value, "reason": reason})
 
-    type_name = type_names.get(motion_type, "运动")
-    preview = text_preview[:60] + ('...' if len(text_preview) > 60 else '')
+    if motion_type not in supported:
+        warnings.append("未能确定可播放的运动类型，或该运动尚无对应动画；不会替换为抛体示例。")
+    else:
+        if re.search(r"\d\s*(?:km/h|cm(?:/s)?|mm(?:/s)?|rad(?:/s)?|min\b|分钟|小时|厘米|毫米|千米|公里|弧度)", text, re.IGNORECASE) or re.search(
+                r"质量\s*(?:为|是|[:：=])?\s*[-+]?\d+(?:\.\d+)?\s*(?:g\b|克)", text, re.IGNORECASE):
+            warnings.append("当前解析器只支持 SI 单位和角度制；请把速度换成 m/s、高度换成 m、质量换成 kg、时间换成秒、角度换成度后重试。")
+        if motion_type != "uniform":
+            assume("gravity", 9.8, "题目未给出重力加速度，假设地球标准重力 g=9.8 m/s²。")
+            if not re.search(r"(?:忽略|不计|无)空气阻力", text):
+                assumptions.append({"parameter": "air_resistance", "value": 0,
+                                    "reason": "动画使用理想抛体/自由落体模型，忽略空气阻力，落到参考地面 y=0 时结束。"})
+            if params.get("friction") is not None or re.search(r"(?:考虑|存在|有)空气阻力|反弹", text):
+                warnings.append("当前动画不处理阻力、摩擦或反弹；不会忽略这些条件后生成轨迹。")
+        if motion_type == "horizontal_projectile":
+            assume("angle", 0, "由水平抛出推得发射角为 0°。")
+        elif motion_type == "vertical_throw":
+            assume("angle", 90, "由竖直上抛推得发射角为 90°。")
+        elif motion_type == "free_fall":
+            assume("initial_speed", 0, "自由落体按从静止释放的定义处理，初速度为 0 m/s。")
+            assume("angle", 90, "自由落体为竖直运动；初速度为零时角度不影响轨迹。")
+        elif motion_type == "uniform":
+            assume("angle", 0, "题目未给出方向，演示假设沿水平正方向匀速运动。")
+            assume("duration", 5, "题目未给出运动时间，使用 5 秒演示窗口，不代表实际运动总时长。")
+        elif params.get("initial_speed") == 0:
+            assume("angle", 0, "初速度为零，发射方向不影响轨迹，采用 0° 角度约定。")
+        if motion_type in {"projectile", "vertical_throw", "uniform"}:
+            assume("initial_height", 0, "题目未给出初始高度，假设从参考地面 y=0 开始。")
 
-    steps = [
-        f"解析题干：{preview}",
-        f"识别运动类型：{type_name}",
-    ]
+        required = ["initial_speed", "angle", "initial_height"]
+        if motion_type != "uniform":
+            required.append("gravity")
+        else:
+            required.append("duration")
+        labels = {"initial_speed": "初速度", "angle": "发射角度", "initial_height": "初始高度", "gravity": "重力加速度", "duration": "运动时间"}
+        for key in required:
+            if params.get(key) is None:
+                warnings.append(f"缺少必要参数：{labels[key]} ({key})；请补充后再播放动画。")
+            elif not is_number(params[key]):
+                warnings.append(f"{labels[key]} ({key}) 必须是有限数值。")
+        for key in ["initial_speed", "initial_height", "duration", "mass", "gravity", "angle", "friction"]:
+            value = params.get(key)
+            if value is None:
+                continue
+            if not is_number(value):
+                warnings.append(f"{key} 必须是有限数值。")
+                continue
+            if value < 0 or (key in {"gravity", "mass"} and value == 0) or (key == "angle" and value > 90):
+                warnings.append(f"{key}={value} 超出当前动画支持的范围，不会用默认值替换。")
+        if motion_type == "horizontal_projectile" and params.get("angle") != 0:
+            warnings.append("水平抛出与给出的非零角度冲突，请确认题干。")
+        if motion_type == "vertical_throw" and params.get("angle") != 90:
+            warnings.append("竖直上抛与给出的角度冲突，请确认题干。")
+        if motion_type == "free_fall" and params.get("initial_speed") != 0:
+            warnings.append("自由落体与给出的非零初速度冲突，请确认题干。")
 
-    # 参数说明
-    v0 = params.get("initial_speed")
-    angle = params.get("angle")
-    h0 = params.get("initial_height") or 0
-    g = params.get("gravity") or 9.8
-
-    param_parts = []
-    if v0 is not None:
-        param_parts.append(f"初速度={v0} m/s")
-    if angle is not None:
-        param_parts.append(f"角度={angle}°")
-    if h0:
-        param_parts.append(f"高度={h0} m")
-    param_parts.append(f"g={g} m/s²")
-
-    steps.append(f"提取参数：{', '.join(param_parts)}")
-    steps.append("应用运动学公式求解各物理量")
-    steps.append("生成动画指令，可视化物体运动轨迹")
-
-    return steps
+    # Warnings mean the problem is insufficient or inconsistent: no plausible-looking fallback.
+    animation = None
+    if not warnings:
+        animation = generate_animation_instructions(motion_type, params)
+        steps.extend(f"明确假设：{a['reason']}" for a in assumptions)
+        if motion_type != "uniform":
+            steps.append(f"由已确认参数计算落地时间：{animation['duration']:.3f} s。")
+            if params.get("duration") is not None:
+                steps.append(f"题干运动时间为 {params['duration']} s；此动画展示到参考地面的完整飞行，动画时长使用计算出的落地时间。")
+        steps.append("使用上述参数和明确假设生成运动动画。")
+    else:
+        steps.append("条件不足或存在冲突，未生成动画；请查看警告并补充题目。")
+    return {"problem_text": text, "problem_type": motion_type, "parameters": params,
+            "solution_steps": steps, "animation_instructions": animation,
+            "assumptions": assumptions, "warnings": list(dict.fromkeys(warnings))}
 
 
 def generate_animation_instructions(motion_type: str, params: dict) -> dict:
-    """生成动画指令"""
-    g = params.get("gravity") or 9.8
-    v0 = params.get("initial_speed")
-    angle = params.get("angle")
-    h0 = params.get("initial_height") or 0
-    friction = params.get("friction")
-
-    # 根据运动类型设置默认值
-    if motion_type == "horizontal_projectile":
-        if v0 is None:
-            v0 = 10.0
-        if angle is None:
-            angle = 0
-        if h0 == 0:
-            h0 = 8.0
-        anim_type = "projectile"
-
-    elif motion_type == "free_fall":
-        v0 = 0
-        if angle is None:
-            angle = 90
-        if h0 == 0:
-            h0 = 10.0
-        anim_type = "free_fall"
-
-    elif motion_type == "vertical_throw":
-        if v0 is None:
-            v0 = 15.0
-        if angle is None:
-            angle = 90
-        anim_type = "projectile"
-
-    elif motion_type == "uniform":
-        if v0 is None:
-            v0 = 5.0
-        angle = 0
-        anim_type = "uniform"
-
-    elif motion_type == "inclined_plane":
-        if v0 is None:
-            v0 = 0
-        if angle is None:
-            angle = 30
-        anim_type = "inclined_plane"
-
-    else:  # general projectile
-        if v0 is None:
-            v0 = 20.0
-        if angle is None:
-            angle = 45.0
-        anim_type = "projectile"
-
-    # 计算持续时间和缩放
-    duration = estimate_duration(anim_type, v0, angle, g, h0)
-    scale = estimate_scale(anim_type, v0, angle, g, h0)
-
-    instructions = {
-        "type": anim_type,
-        "initial_speed": v0,
-        "angle": angle,
-        "gravity": g,
-        "initial_x": 0,
-        "initial_y": h0,
-        "duration": duration,
-        "scale": scale,
-    }
-
-    # 斜面特有参数
-    if motion_type == "inclined_plane" and friction is not None:
-        instructions["friction"] = friction
-
-    return instructions
+    """Called only after validation; no physics fallback values."""
+    anim_type = "free_fall" if motion_type == "free_fall" else "uniform" if motion_type == "uniform" else "projectile"
+    v0, angle, h0 = params["initial_speed"], params["angle"], params["initial_height"]
+    g = params.get("gravity")
+    duration = params["duration"] if motion_type == "uniform" else estimate_duration(anim_type, v0, angle, g, h0)
+    return {"type": anim_type, "initial_speed": v0, "angle": angle, "gravity": g,
+            "initial_x": 0, "initial_y": h0, "mass": params.get("mass"), "duration": duration,
+            "scale": estimate_scale(anim_type, v0, angle, g, h0, duration)}
 
 
 # ==================== 主入口 ====================
@@ -703,7 +543,9 @@ def process_image(
             "problem_type": str,
             "parameters": dict,
             "solution_steps": list[str],
-            "animation_instructions": dict
+            "animation_instructions": dict | None,
+            "assumptions": list[dict],
+            "warnings": list[str]
         }
 
     Raises:

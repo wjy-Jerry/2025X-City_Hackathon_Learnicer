@@ -15,7 +15,6 @@ class PhysicsVisualizer {
     } else {
       throw new Error('参数必须是 Canvas 元素或 ID 字符串');
     }
-
     this.config = config;
     this.currentAnimation = null;
     this.animationData = null;
@@ -54,18 +53,11 @@ class PhysicsVisualizer {
         this.currentAnimation = new UniformCircular(this.canvas, params);
         break;
 
-      case 'incline_plane':
-        this.currentAnimation = new InclinePlaneMotion(this.canvas, params);
-        break;
-
-      case 'circular_motion':
-        this.currentAnimation = new CircularMotion(this.canvas, params);
-        break;
-
       default:
-        console.warn(`未知的动画类型: ${subType}，尝试使用 projectile_motion 作为 fallback`);
-        this.currentAnimation = new ProjectileMotion(this.canvas, params);
-        break;
+        throw new Error(`不支持的动画类型：${subType}，不会替换为抛体运动。`);
+    }
+    if (Number.isFinite(data.scale) && data.scale > 0) {
+      this.currentAnimation.config.scale = data.scale; // Pure display scale, not a physics parameter.
     }
     
     // 触发事件通知前端

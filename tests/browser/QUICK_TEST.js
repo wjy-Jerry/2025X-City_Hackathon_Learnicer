@@ -97,6 +97,11 @@
     }
 
     const data = await response.json();
+    renderPhysicsNotes(data.assumptions || [], data.warnings || []);
+    if (!data.animation_instructions || data.warnings?.length) {
+      console.warn('未生成动画：', data.warnings);
+      return;
+    }
     console.log('✅ 后端响应成功');
     console.log('   题目类型:', data.problem_type);
     console.log('   运动类型:', data.parameters?.motion_type);

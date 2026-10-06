@@ -15,7 +15,8 @@ function simulateApiResponse(problemDescription) {
 
 // 选择动画并注入参数
 function loadAnimationFromApi(canvas, apiResponse) {
-  const params = apiResponse.parameters;
+  if (!apiResponse.animation_instructions) return null;
+  const params = { ...apiResponse.parameters };
   const subType = apiResponse.animation_instructions.type || apiResponse.parameters.motion_type;
   const showVelocity = apiResponse.solution_steps.some(step => 
     step.title && step.title.includes('速度')
@@ -63,10 +64,11 @@ function loadAnimationFromApi(canvas, apiResponse) {
 class VerticalThrow extends AnimationBase {
   constructor(canvas, params) {
     super(canvas);
+    AnimationBase.validateParameters(params, ['v0', 'h0', 'g'], ['g']);
     this.v0 = params.v0;
-    this.h0 = params.h0 || 0;
-    this.g = params.g || 9.8;
-    this.mass = params.mass || 1;
+    this.h0 = params.h0;
+    this.g = params.g;
+    this.mass = params.mass ?? null;
     this.showVelocity = params.showVelocity || true;
     this.showAcceleration = params.showAcceleration || false;
     

@@ -12,49 +12,28 @@
 import sys
 import requests
 import json
+import subprocess
+from pathlib import Path
 
 BASE_URL = "http://127.0.0.1:5000"
 
 
 def simulate_frontend_normalize(backend_response):
-    """
-    模拟前端 AnimationEngine.normalizePayload 的处理逻辑
-    """
-    raw = backend_response.get('animation_instructions', {})
-
-    if not raw:
-        return None
-
-    # 检查是否已是新格式
-    if 'sub_type' in raw and 'parameters' in raw:
-        return raw
-
-    # 旧格式转新格式
-    motion_type = raw.get('motion_type_original') or raw.get('type') or 'projectile'
-
-    # 映射类型
-    if motion_type == 'free_fall':
-        sub_type = 'free_fall'
-    elif motion_type == 'uniform':
-        sub_type = 'uniform'
-    else:
-        sub_type = 'projectile_motion'
-
-    # 提取参数（使用修复后的逻辑）
-    parameters = {
-        'v0': raw.get('initial_speed') if 'initial_speed' in raw else (raw.get('v0') if 'v0' in raw else 20),
-        'angle': raw.get('angle') if 'angle' in raw else 45,
-        'g': raw.get('gravity') if 'gravity' in raw else (raw.get('g') if 'g' in raw else 9.8),
-        'h0': raw.get('initial_y') if 'initial_y' in raw else (raw.get('h0') if 'h0' in raw else 0),
-        'mass': raw.get('mass') if 'mass' in raw else 1,
-        'scale': raw.get('scale'),
-        'duration': raw.get('duration')
-    }
-
-    return {
-        'sub_type': sub_type,
-        'parameters': parameters
-    }
+    """Run the real JavaScript adapter, avoiding a stale Python copy of defaults."""
+    script = """
+const fs = require('fs'), vm = require('vm');
+const context = vm.createContext({window: {}});
+for (const file of ['animations/animation_base.js', 'static/animation.js']) {
+  vm.runInContext(fs.readFileSync(file, 'utf8'), context);
+}
+const raw = JSON.parse(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify(context.window.AnimationEngine.normalizePayload(raw)));
+"""
+    result = subprocess.run(['node', '-e', script],
+                            input=json.dumps(backend_response.get('animation_instructions')),
+                            capture_output=True, text=True, check=True,
+                            cwd=Path(__file__).resolve().parent.parent)
+    return json.loads(result.stdout)
 
 
 def test_integration(text, description):
@@ -72,6 +51,9 @@ def test_integration(text, description):
         return None
 
     backend_data = response.json()
+    if backend_data.get('warnings') or not backend_data.get('animation_instructions'):
+        print(f"❌ 预期有效动画，收到警告: {backend_data.get('warnings')}")
+        return None
 
     # 2. 显示后端返回
     print(f"\n后端返回的 animation_instructions:")

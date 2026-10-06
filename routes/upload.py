@@ -32,7 +32,9 @@ def upload():
         "problem_type": str,
         "problem_text": str,
         "solution_steps": list[str],
-        "animation_instructions": dict,
+        "animation_instructions": dict | null,
+        "assumptions": list[dict],
+        "warnings": list[str],
         "parameters": dict (可选)
     }
     """
@@ -145,7 +147,9 @@ def upload():
             "problem_type": result.get("problem_type", "unknown"),
             "problem_text": result.get("problem_text", ""),
             "solution_steps": result.get("solution_steps", []),
-            "animation_instructions": result.get("animation_instructions", {}),
+            "animation_instructions": result.get("animation_instructions"),
+            "assumptions": result.get("assumptions", []),
+            "warnings": result.get("warnings", []),
         }
 
         # 可选：附加原始参数（方便前端调试）

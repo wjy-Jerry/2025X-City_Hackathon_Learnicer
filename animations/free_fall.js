@@ -2,11 +2,17 @@ class FreeFall extends AnimationBase {
   constructor(canvas, params) {
     super(canvas);
     // 兼容性：支持 height 或 h0
-    this.h0 = params.height !== undefined ? params.height : (params.h0 !== undefined ? params.h0 : 10);
-    this.g = params.g !== undefined ? params.g : 9.8;        // 重力加速度（默认值）
-    this.mass = params.mass !== undefined ? params.mass : 1;  // 质量（默认值）
-    this.bounce = params.bounce || false;  // 是否反弹
-    this.bounceLoss = params.bounceLoss || 0.8;  // 能量损失系数
+    params = { ...params, h0: params.h0 ?? params.height };
+    AnimationBase.validateParameters(params, ['h0', 'g'], ['g']);
+    if (params.v0 != null && params.v0 !== 0) throw new Error('自由落体必须从静止释放。');
+    this.h0 = params.h0;
+    this.g = params.g;
+    this.mass = params.mass ?? null;
+    this.bounce = params.bounce === true;
+    if (this.bounce && (!Number.isFinite(params.bounceLoss) || params.bounceLoss < 0 || params.bounceLoss > 1)) {
+      throw new Error('反弹动画必须明确提供 0 到 1 之间的 bounceLoss。');
+    }
+    this.bounceLoss = params.bounceLoss;
     this.showVelocity = params.showVelocity || true;
     this.showAcceleration = params.showAcceleration || false;
     

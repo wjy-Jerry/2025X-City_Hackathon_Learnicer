@@ -23,7 +23,7 @@ function createPage(reply) {
     'imageFields', 'manualText', 'exampleButton', 'selectedFileName',
     'loading', 'loadingMessage', 'problemTextContainer', 'stepsContainer',
     'instructionsContainer', 'metaContainer', 'animationCanvas', 'controls',
-    'playBtn', 'pauseBtn', 'replayBtn', 'errorBox',
+    'playBtn', 'pauseBtn', 'replayBtn', 'errorBox', 'assumptionsContainer', 'warningsContainer',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, createElement()]));
   const submitButton = createElement();
@@ -73,6 +73,7 @@ const success = {
   problem_text: '一个物体从8米高的平台以10m/s的速度水平抛出，g=9.8m/s²，求运动轨迹。',
   solution_steps: ['识别运动类型', '计算运动轨迹'],
   animation_instructions: { type: 'projectile', initial_speed: 10, angle: 0 },
+  assumptions: [], warnings: [],
 };
 
 test('manual mode sends only manual_text and renders the canonical response', async () => {
@@ -116,4 +117,48 @@ test('empty manual text stays in the browser and never sends a request', async (
   await page.submit();
   assert.equal(page.requests.length, 0);
   assert.match(page.elements.errorBox.textContent, /请输入物理题目/);
+});
+
+test('gravity assumption is rendered with its value and reason', async () => {
+  const data = { ...success, assumptions: [{ parameter: 'gravity', value: 9.8, reason: 'Standard Earth gravity is assumed.' }] };
+  const page = createPage(() => ({ ok: true, json: async () => data }));
+  page.elements.exampleButton.handlers.click();
+  await page.submit();
+  assert.match(page.elements.assumptionsContainer.children[0].children[0].textContent, /gravity = 9.8.*Earth gravity/);
+  assert.equal(page.animations[0].played, true);
+});
+
+test('null or absent animation renders warnings and does not start the engine', async () => {
+  for (const animation of [null, undefined]) {
+    const page = createPage(() => ({ ok: true, json: async () => ({ ...success,
+      animation_instructions: animation, warnings: ['Missing initial_speed; please supply it.'] }) }));
+    page.elements.exampleButton.handlers.click();
+    await page.submit();
+    assert.match(page.elements.warningsContainer.children[0].children[0].textContent, /Missing initial_speed/);
+    assert.equal(page.elements.problemTextContainer.textContent, success.problem_text);
+    assert.equal(page.animations.length, 0);
+    assert.equal(page.elements.controls.style.display, 'none');
+    assert.equal(page.elements.errorBox.textContent, '');
+  }
+});
+
+test('a successful response after an insufficient one shows controls again', async () => {
+  let count = 0;
+  const page = createPage(() => ({ ok: true, json: async () => ++count === 2
+    ? { ...success, animation_instructions: null, warnings: ['Missing speed'] } : success }));
+  page.elements.exampleButton.handlers.click();
+  await page.submit();
+  await page.submit();
+  assert.equal(page.elements.controls.style.display, 'none');
+  await page.submit();
+  assert.equal(page.elements.controls.style.display, 'flex');
+  assert.equal(page.animations.length, 1);
+});
+
+test('an array response never creates a replacement projectile', async () => {
+  const page = createPage(() => ({ ok: true, json: async () => ({ ...success, animation_instructions: [] }) }));
+  page.elements.exampleButton.handlers.click();
+  await page.submit();
+  assert.equal(page.animations.length, 0);
+  assert.match(page.elements.errorBox.textContent, /响应格式/);
 });

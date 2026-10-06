@@ -104,7 +104,7 @@ def main():
     print("="*80)
 
     # 检查1：所有结果必须包含必需字段
-    required_fields = ['problem_type', 'problem_text', 'solution_steps', 'animation_instructions']
+    required_fields = ['problem_type', 'problem_text', 'solution_steps', 'animation_instructions', 'assumptions', 'warnings']
     all_have_required = True
 
     for r in results:
@@ -127,12 +127,22 @@ def main():
             isinstance(data['problem_text'], str) and
             isinstance(data['solution_steps'], list) and
             all(isinstance(step, str) for step in data['solution_steps']) and
-            isinstance(data['animation_instructions'], dict)
+            isinstance(data['animation_instructions'], dict) and
+            isinstance(data['assumptions'], list) and
+            all(isinstance(a, dict) and {'parameter', 'value', 'reason'} <= a.keys() for a in data['assumptions']) and
+            isinstance(data['warnings'], list) and not data['warnings']
         )
         if not valid_shape or data['problem_text'] != r['text'] or 'ocr_text' in data:
             print(f"❌ FAIL: {r['description']} 的响应形状或 problem_text 不符合契约")
             return False
     print("✅ PASS: 响应形状正确，problem_text 与输入一致，未返回 ocr_text")
+
+    insufficient = requests.post(f"{BASE_URL}/upload", data={"manual_text": "水平抛出，初速度=10m/s"}, timeout=10)
+    data = insufficient.json()
+    if insufficient.status_code != 200 or data.get('animation_instructions') is not None or not data.get('warnings'):
+        print("❌ FAIL: 条件不足应返回警告和 null 动画")
+        return False
+    print("✅ PASS: 条件不足返回警告，不生成示例动画")
 
     # 检查2：所有 solution_steps 必须不同
     steps_set = set()

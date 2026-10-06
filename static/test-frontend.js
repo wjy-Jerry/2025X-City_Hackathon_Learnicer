@@ -114,6 +114,14 @@ window.PhysicsTestSuite = {
       // 渲染结果
       this.renderResults(data);
 
+      if (this.currentEngine) this.currentEngine.pause();
+      if (!data.animation_instructions || data.warnings?.length) {
+        document.getElementById('controls').style.display = 'none';
+        const canvas = document.getElementById('animationCanvas');
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+        return data;
+      }
+
       // 播放动画
       const canvas = document.getElementById('animationCanvas');
       this.currentEngine = new AnimationEngine(canvas);
@@ -170,6 +178,7 @@ window.PhysicsTestSuite = {
 
   // 渲染结果到页面
   renderResults(data) {
+    renderPhysicsNotes(data.assumptions || [], data.warnings || []);
     // 渲染解题步骤
     const stepsContainer = document.getElementById('stepsContainer');
     if (stepsContainer) {

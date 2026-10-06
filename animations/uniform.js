@@ -1,6 +1,7 @@
 class Uniform extends AnimationBase {
   constructor(canvas, params) {
     super(canvas);
+    AnimationBase.validateParameters(params, ['vx', 'vy', 'x0', 'y0', 'duration']);
     this.vx = params.vx;      // x 方向速度
     this.vy = params.vy;      // y 方向速度
     this.x0 = params.x0;      // 初始 x
@@ -9,7 +10,7 @@ class Uniform extends AnimationBase {
     this.duration = params.duration;  // 总时长
     this.showVelocity = params.showVelocity || true;
     this.showAcceleration = params.showAcceleration || false;
-    this.g = params.g || 0;  // 修改：添加 g=0 以兼容 gForce
+    this.g = params.g ?? null; // 匀速不等于无重力；未知时不显示重力数值
     
     this.init();
   }
@@ -45,7 +46,7 @@ class Uniform extends AnimationBase {
     }
     
     // 如果有 duration，结束
-    if (this.duration && this.time >= this.duration) {
+    if (this.time >= this.duration) {
       this.isEnded = true;
     }
   }

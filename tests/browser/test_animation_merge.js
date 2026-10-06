@@ -73,7 +73,8 @@
     type: 'projectile',
     initial_speed: 15,
     angle: 30,
-    gravity: 9.8
+    gravity: 9.8,
+    initial_y: 0
   };
 
   const normalized = AnimationEngine.normalizePayload(oldFormatData);
@@ -155,7 +156,8 @@
       type: 'projectile',
       initial_speed: 20,
       angle: 45,
-      gravity: 9.8
+      gravity: 9.8,
+      initial_y: 0
     });
 
     assert(

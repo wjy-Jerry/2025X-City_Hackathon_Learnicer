@@ -232,7 +232,7 @@
   description: '匀加速直线运动',
   response: {
     animation_instructions: { type: 'uniform_acceleration' },
-    parameters: { F: 50, mu: 0.2, mass: 10, g: 9.8, v0: 0, duration: 10 },
+    parameters: { F: 50, mu: 0.2, mass: 10, g: 9.8, x0: 0, v0: 0, duration: 10 },
     solution_steps: [
       { title: '步骤1: 确定力', content: '拉力 F = 50 N, 摩擦系数 μ = 0.2, 质量 m = 10 kg, g = 9.8 m/s²' },
       { title: '步骤2: 计算支撑力和摩擦力', content: '支撑力 Fn = mg = 10 × 9.8 = 98 N<br>摩擦力 f = μ Fn = 0.2 × 98 = 19.6 N' },
@@ -243,9 +243,10 @@
 },
 {
   description: '匀速圆周运动',
+  expectedWarning: '所需向心力超过最大摩擦力',
   response: {
     animation_instructions: { type: 'uniform_circular' },
-    parameters: { radius: 5, omega: 2, mass: 1, mu: 0.5, g: 9.8, duration: 10 },
+    parameters: { radius: 5, omega: 2, mass: 1, mu: 0.5, g: 9.8, initialAngle: 0, duration: 10 },
     solution_steps: [
       { title: '步骤1: 确定参数', content: '半径 r = 5 m, 角速度 ω = 2 rad/s, 质量 m = 1 kg, g = 9.8 m/s²' },
       { title: '步骤2: 计算线速度和向心力', content: '线速度 v = r ω = 5 × 2 = 10 m/s<br>向心力 Fc = m v² / r = 1 × 100 / 5 = 20 N' },
@@ -263,7 +264,17 @@
       const test = testCases[currentTestIndex];
       log(`开始测试: ${test.description}`);
       const apiResponse = test.response;
-      currentAnimation = loadAnimationFromApi(canvas, apiResponse);
+      try {
+        currentAnimation = loadAnimationFromApi(canvas, apiResponse);
+        if (test.expectedWarning) throw new Error('不应生成此轨迹');
+      } catch (error) {
+        if (test.expectedWarning && error.message.includes(test.expectedWarning)) {
+          log(`验证通过：${error.message}；未生成误导动画。`);
+          currentTestIndex = (currentTestIndex + 1) % testCases.length;
+          return;
+        }
+        throw error;
+      }
       
       // 修改：加载新动画后，立即同步 checkbox 状态
       currentAnimation.config.showVelocityVectors = velocityCheckbox.checked;

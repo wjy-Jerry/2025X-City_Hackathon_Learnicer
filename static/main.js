@@ -13,6 +13,8 @@ const problemTextContainer = document.getElementById('problemTextContainer');
 const stepsContainer = document.getElementById('stepsContainer');
 const instructionsContainer = document.getElementById('instructionsContainer');
 const metaContainer = document.getElementById('metaContainer');
+const assumptionsContainer = document.getElementById('assumptionsContainer');
+const warningsContainer = document.getElementById('warningsContainer');
 const canvas = document.getElementById('animationCanvas');
 const controls = document.getElementById('controls');
 const playBtn = document.getElementById('playBtn');
@@ -80,10 +82,30 @@ function renderSteps(steps) {
   stepsContainer.appendChild(ol);
 }
 
+function renderPhysicsNotes(assumptions, warnings) {
+  for (const [container, entries, empty] of [
+    [assumptionsContainer, assumptions.map(a => `${a.parameter} = ${a.value}：${a.reason}`), '无额外参数假设。'],
+    [warningsContainer, warnings, '无警告。'],
+  ]) {
+    container.innerHTML = '';
+    if (!entries.length) {
+      container.textContent = empty;
+      continue;
+    }
+    const list = document.createElement('ul');
+    entries.forEach(entry => {
+      const item = document.createElement('li');
+      item.textContent = entry;
+      list.appendChild(item);
+    });
+    container.appendChild(list);
+  }
+}
+
 function renderInstructions(rawInstructions) {
   instructionsContainer.innerHTML = '';
   if (!rawInstructions) {
-    instructionsContainer.textContent = '暂无动画指令';
+    instructionsContainer.textContent = '未生成动画，请查看警告并补充必要条件。';
     return;
   }
 
@@ -128,28 +150,7 @@ function renderMeta(data) {
 }
 
 function normalizeAnimationData(raw) {
-  if (!raw) return null;
-
-  if (Array.isArray(raw)) {
-    // 占位数组场景：使用一个默认的抛体运动示例，确保画布可演示
-    return {
-      type: 'projectile',
-      initial_speed: 18,
-      angle: 55,
-      gravity: 9.8,
-      initial_x: 0,
-      initial_y: 0,
-      scale: 24,
-      duration: 4,
-    };
-  }
-
-  if (typeof raw === 'object') {
-    // 如果是对象，直接返回用于动画解析
-    return raw;
-  }
-
-  return null;
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
 }
 
 function bindControls(currentEngine) {
@@ -199,6 +200,8 @@ uploadForm.addEventListener('submit', async (event) => {
   stepsContainer.textContent = '';
   instructionsContainer.textContent = '';
   metaContainer.textContent = '';
+  assumptionsContainer.textContent = '';
+  warningsContainer.textContent = '';
 
   try {
     const response = await fetch('/upload', { method: 'POST', body: formData });
@@ -214,9 +217,11 @@ uploadForm.addEventListener('submit', async (event) => {
     if (!data || typeof data.problem_text !== 'string' ||
         typeof data.problem_type !== 'string' ||
         !Array.isArray(data.solution_steps) ||
-        !data.animation_instructions ||
-        typeof data.animation_instructions !== 'object' ||
-        Array.isArray(data.animation_instructions)) {
+        !Array.isArray(data.assumptions) ||
+        !data.assumptions.every(a => a && typeof a.parameter === 'string' && 'value' in a && typeof a.reason === 'string') ||
+        !Array.isArray(data.warnings) || !data.warnings.every(w => typeof w === 'string') ||
+        (data.animation_instructions != null &&
+          (typeof data.animation_instructions !== 'object' || Array.isArray(data.animation_instructions)))) {
       throw new Error('服务器响应格式不正确，请检查后端日志。');
     }
 
@@ -224,10 +229,11 @@ uploadForm.addEventListener('submit', async (event) => {
     renderSteps(data.solution_steps);
     renderInstructions(data.animation_instructions);
     renderMeta(data);
+    renderPhysicsNotes(data.assumptions, data.warnings);
 
     const animationData = normalizeAnimationData(data.animation_instructions);
-    if (!animationData) {
-      showError('后端未返回可用的动画数据，已跳过动画演示。');
+    if (!animationData || data.warnings.length) {
+      if (!data.warnings.length) showError('后端未返回可用的动画数据，已跳过动画演示。');
       return;
     }
 
@@ -235,11 +241,11 @@ uploadForm.addEventListener('submit', async (event) => {
       // 单例模式：首次创建，后续重用
       if (!engine) {
         engine = new AnimationEngine(canvas);
-        bindControls(engine);
       } else {
         engine.destroy();
       }
       engine.loadInstructions(animationData);
+      bindControls(engine);
       engine.play();
     } catch (err) {
       console.error('动画初始化失败:', err);
