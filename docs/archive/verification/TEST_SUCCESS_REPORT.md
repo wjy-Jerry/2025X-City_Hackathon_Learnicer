@@ -112,9 +112,9 @@ http://127.0.0.1:5001/
 ### 新增的文件（6 个）
 
 - ✅ `templates/animation_test.html` - 可视化测试页面
-- ✅ `test_animation_merge.js` - 自动化测试脚本
-- ✅ `ANIMATION_API.md` - API 文档
-- ✅ `ANIMATION_TEST.md` - 验证文档
+- ✅ `../../../tests/browser/test_animation_merge.js` - 自动化测试脚本
+- ✅ `../../ANIMATION_API.md` - API 文档
+- ✅ `../animation/ANIMATION_TEST.md` - 验证文档
 - ✅ `ANIMATION_AUDIT_REPORT.md` - 审计报告
 - ✅ `QUICK_START_TEST.md` - 快速测试指南
 
@@ -281,13 +281,13 @@ def animations_static(filename):
    ```
 
 2. 📢 通知团队:
-   - 分享 `ANIMATION_API.md`
+   - 分享 `../../ANIMATION_API.md`
    - 说明前端代码无需修改
    - 告知新增的高级功能
 
 3. 📚 更新文档:
    - 在 README.md 中添加动画模块使用说明
-   - 链接到 ANIMATION_API.md
+   - 链接到 ../../ANIMATION_API.md
 
 ---
 
@@ -298,8 +298,8 @@ def animations_static(filename):
 1. **查看浏览器控制台** (F12)
 2. **检查服务器日志** (运行终端的输出)
 3. **参考文档**:
-   - `ANIMATION_API.md` - API 使用
-   - `ANIMATION_TEST.md` - 详细测试步骤
+   - `../../ANIMATION_API.md` - API 使用
+   - `../animation/ANIMATION_TEST.md` - 详细测试步骤
    - `ANIMATION_AUDIT_REPORT.md` - 完整审计报告
 
 ---

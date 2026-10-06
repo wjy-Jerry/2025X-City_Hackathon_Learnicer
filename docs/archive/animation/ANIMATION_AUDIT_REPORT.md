@@ -258,7 +258,7 @@ class AnimationEngine {
 
 ### ✅ 新增的文件（2 个）
 
-#### 文件 4：`ANIMATION_API.md`
+#### 文件 4：`../../ANIMATION_API.md`
 **用途**：统一对外接口契约文档
 **内容**：
 - 初始化方法
@@ -445,7 +445,7 @@ interface AnimationData {
 ## 📞 附录
 
 ### 相关文件索引
-- **API 文档**：`ANIMATION_API.md`
+- **API 文档**：`../../ANIMATION_API.md`
 - **测试文档**：`ANIMATION_TEST.md`
 - **核心实现**：`animations/physics_visualizer.js`
 - **兼容适配层**：`static/animation.js`

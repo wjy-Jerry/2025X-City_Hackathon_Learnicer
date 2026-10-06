@@ -2,7 +2,7 @@
 """
 端到端回归测试：验证上传不同文本产生不同输出
 
-测试通过 /upload 端点使用 manual_text 参数模拟不同图片的 OCR 结果
+测试 /upload 的 manual_text 请求及统一的 problem_text 响应契约
 """
 
 import sys
@@ -19,7 +19,7 @@ def test_upload_with_manual_text(text: str, description: str) -> dict:
     使用 manual_text 参数测试上传接口
 
     Args:
-        text: 模拟的 OCR 文本
+        text: 手动输入的题目文本
         description: 测试用例描述
 
     Returns:
@@ -30,10 +30,11 @@ def test_upload_with_manual_text(text: str, description: str) -> dict:
     print(f"{'='*80}")
     print(f"输入文本: {text[:60]}...")
 
-    # 使用 manual_text 参数，跳过实际的文件上传和 OCR
+    # manual_text 使用规则解析，不调用图片 OCR 或 Claude
     response = requests.post(
         f"{BASE_URL}/upload",
-        data={"manual_text": text}
+        data={"manual_text": text},
+        timeout=10,
     )
 
     if response.status_code != 200:
@@ -46,7 +47,7 @@ def test_upload_with_manual_text(text: str, description: str) -> dict:
     # 打印关键字段
     print(f"✅ 请求成功")
     print(f"问题类型: {data.get('problem_type', 'N/A')}")
-    print(f"OCR 文本长度: {len(data.get('ocr_text', ''))}")
+    print(f"题目文本长度: {len(data.get('problem_text', ''))}")
     print(f"解题步骤数: {len(data.get('solution_steps', []))}")
     print(f"解题步骤: {data.get('solution_steps', [])}")
     print(f"动画类型: {data.get('animation_instructions', {}).get('type', 'N/A')}")
@@ -103,7 +104,7 @@ def main():
     print("="*80)
 
     # 检查1：所有结果必须包含必需字段
-    required_fields = ['problem_type', 'ocr_text', 'solution_steps', 'animation_instructions']
+    required_fields = ['problem_type', 'problem_text', 'solution_steps', 'animation_instructions']
     all_have_required = True
 
     for r in results:
@@ -117,6 +118,21 @@ def main():
     else:
         print("❌ FAIL: 部分响应缺少必需字段")
         return False
+
+    # 检查字段类型及手动输入是否按契约回传
+    for r in results:
+        data = r['result']
+        valid_shape = (
+            isinstance(data['problem_type'], str) and
+            isinstance(data['problem_text'], str) and
+            isinstance(data['solution_steps'], list) and
+            all(isinstance(step, str) for step in data['solution_steps']) and
+            isinstance(data['animation_instructions'], dict)
+        )
+        if not valid_shape or data['problem_text'] != r['text'] or 'ocr_text' in data:
+            print(f"❌ FAIL: {r['description']} 的响应形状或 problem_text 不符合契约")
+            return False
+    print("✅ PASS: 响应形状正确，problem_text 与输入一致，未返回 ocr_text")
 
     # 检查2：所有 solution_steps 必须不同
     steps_set = set()

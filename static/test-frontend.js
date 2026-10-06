@@ -192,7 +192,7 @@ window.PhysicsTestSuite = {
         <ul>
           <li><strong>题目类型：</strong>${data.problem_type || '未知'}</li>
           <li><strong>运动类型：</strong>${data.parameters?.motion_type || '未知'}</li>
-          <li><strong>OCR 预览：</strong>${(data.ocr_text || '').substring(0, 50)}...</li>
+          <li><strong>题目文本：</strong>${(data.problem_text || '').substring(0, 50)}...</li>
         </ul>
       `;
     }

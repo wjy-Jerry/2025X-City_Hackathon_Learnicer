@@ -7,6 +7,10 @@ A Flask-based backend with **Claude API 多模态一体化 Pipeline**（同时�
 - AI Pipeline: **Claude API** (多模态，一次性完成 OCR + 解析 + 动画指令)
 - Frontend: HTML/CSS/JavaScript + Canvas
 
+## No-key browser demo
+
+Install dependencies with `pip install -r requirements.txt`, run `python app.py`, and open `http://127.0.0.1:5000/`. The page starts in **手动输入（无需 API Key）** mode. Click **填入示例题目**, then **解析文字并生成动画** to see the returned problem text, solution steps, and animation. This mode uses rule-based text parsing; it does **not** call OCR or Claude. No `.env` file or API key is required. Image upload remains available after configuring `CLAUDE_API_KEY`.
+
 ## 📋 Table of Contents
 - [安全配置说明](#安全配置说明)
 - [Requirements](#requirements)
@@ -22,7 +26,7 @@ A Flask-based backend with **Claude API 多模态一体化 Pipeline**（同时�
 
 **本项目采用环境变量管理所有敏感配置（API Key、密钥等），确保安全性和团队协作友好性。**
 
-### 快速开始配置
+### 图片模式配置（手动浏览器演示无需此步骤）
 
 ```bash
 # 1. 复制配置模板
@@ -61,7 +65,7 @@ vi .env  # 或 nano .env，或 code .env
 
 ### 无 API Key 也能运行（Manual 模式）
 
-如果不配置 Claude API Key，可以使用 **manual 模式**：
+如果不配置 Claude API Key，直接在网页选择手动输入即可；提交 `manual_text` 会自动使用规则解析。命令行测试也可以显式设置：
 
 ```bash
 export PIPELINE_MODE=manual
@@ -79,7 +83,7 @@ manual 模式特性：
 
 - Python: 3.8+
 - pip: 20.2.2+
-- 稳定的网络连接（Claude API 调用）
+- 稳定的网络连接（仅图片模式调用 Claude API 时需要）
 
 ---
 
@@ -111,6 +115,8 @@ pip install -r requirements.txt
 
 ### 3) 配置环境变量
 
+仅图片上传模式需要以下配置；手动输入模式可跳过：
+
 ```bash
 # 复制配置模板
 cp .env.example .env
@@ -130,6 +136,8 @@ python app.py
 ```bash
 flask --app app run --debug
 ```
+
+打开 `http://127.0.0.1:5000/`，默认选择手动输入模式，可直接填入示例题目体验完整浏览器流程。
 
 ### 5) 验证后端运行（健康检查）
 
@@ -163,7 +171,7 @@ curl http://127.0.0.1:5000/pipeline/status
 
 ### Pipeline 模式说明
 
-本项目支持两种 Pipeline 模式，通过环境变量 `PIPELINE_MODE` 切换：
+本项目支持两种输入路径：提交 `manual_text` 使用本地规则解析，提交图片使用 Claude。`PIPELINE_MODE` 用于状态展示和命令行配置；网页通过选中的输入方式决定实际处理路径。
 
 #### 1. Claude 模式（默认，推荐）
 
@@ -193,6 +201,7 @@ export PIPELINE_MODE=manual
 - ✅ 不同输入会产生不同的输出（避免硬编码）
 - ✅ 适用于团队联调、CI、无 Key/离线测试
 - ⚠️ 不调用真实 OCR
+- ⚠️ 仅上传图片仍会走 Claude 路径，不能用图片离线体验
 
 **使用方式：**
 

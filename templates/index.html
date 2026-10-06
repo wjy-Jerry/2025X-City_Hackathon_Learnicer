@@ -11,23 +11,39 @@
     <div class="title-group">
       <p class="eyebrow">Learnicer</p>
       <h1>物理题目可视化解题工具</h1>
-      <p class="subtitle">上传题目图片，查看解析步骤并播放 Canvas 动画</p>
+      <p class="subtitle">输入物理题目或上传图片，查看解题步骤并播放 Canvas 动画</p>
     </div>
   </header>
 
   <main class="layout">
     <section class="panel upload-panel">
-      <h2>上传题目图片</h2>
+      <h2>选择输入方式</h2>
       <form id="uploadForm" class="upload-form">
-        <label class="file-label" for="fileInput">
-          <span>选择图片文件</span>
-          <input type="file" id="fileInput" name="file" accept="image/*" />
-        </label>
-        <button type="submit" class="primary-btn">上传并解析</button>
+        <fieldset class="mode-selector">
+          <legend>解析模式</legend>
+          <label><input type="radio" id="manualMode" name="inputMode" value="manual" checked /> 手动输入（无需 API Key）</label>
+          <label><input type="radio" id="imageMode" name="inputMode" value="image" /> 图片上传（Claude）</label>
+        </fieldset>
+        <div id="manualFields" class="input-panel">
+          <label for="manualText">物理题目</label>
+          <textarea id="manualText" name="manual_text" rows="4" placeholder="例如：一个物体从8米高的平台以10m/s的速度水平抛出，g=9.8m/s²，求运动轨迹。"></textarea>
+          <p class="hint">示例：一个物体从8米高的平台以10m/s的速度水平抛出，g=9.8m/s²，求运动轨迹。</p>
+          <button type="button" id="exampleButton" class="secondary-btn">填入示例题目</button>
+          <p class="hint">手动模式使用规则解析文字，不调用 OCR 或 Claude；结果适合体验演示。</p>
+        </div>
+        <div id="imageFields" class="input-panel" hidden>
+          <label class="file-label" for="fileInput">
+            <span>选择 PNG 或 JPG 图片</span>
+            <input type="file" id="fileInput" name="file" accept="image/png,image/jpeg" disabled />
+          </label>
+          <span id="selectedFileName" class="hint"></span>
+          <p class="hint">图片模式调用 Claude 识别和解析，需要在服务器配置 <code>CLAUDE_API_KEY</code>。</p>
+        </div>
+        <button type="submit" class="primary-btn">解析文字并生成动画</button>
       </form>
       <div id="loading" class="loading" aria-live="polite" role="status" style="display: none;">
         <span class="spinner"></span>
-        <span>正在解析图片，请稍候...</span>
+        <span id="loadingMessage">正在解析题目，请稍候...</span>
       </div>
       <div id="errorBox" class="alert" role="alert" style="display: none;"></div>
     </section>
@@ -35,6 +51,11 @@
     <section class="panel results-panel">
       <div class="results-grid">
         <div class="text-column">
+          <div class="section-header">
+            <h3>题目文本</h3>
+          </div>
+          <div id="problemTextContainer" class="card"></div>
+
           <div class="section-header">
             <h3>解题步骤</h3>
             <p class="hint">按顺序展示后端返回的步骤</p>
@@ -71,7 +92,7 @@
   </main>
 
   <footer class="page-footer">
-    <p>后端接口：<code>POST /upload</code> (multipart/form-data, 字段名 <code>file</code>)</p>
+    <p>后端接口：<code>POST /upload</code>（multipart/form-data，使用 <code>manual_text</code> 或 <code>file</code>）</p>
   </footer>
 
   <!-- 引入 animations/ 核心模块（C 同学版本 - 权威实现） -->

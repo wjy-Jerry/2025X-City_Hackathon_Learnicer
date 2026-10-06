@@ -1,6 +1,15 @@
 const uploadForm = document.getElementById('uploadForm');
 const fileInput = document.getElementById('fileInput');
+const manualMode = document.getElementById('manualMode');
+const imageMode = document.getElementById('imageMode');
+const manualFields = document.getElementById('manualFields');
+const imageFields = document.getElementById('imageFields');
+const manualText = document.getElementById('manualText');
+const exampleButton = document.getElementById('exampleButton');
+const selectedFileName = document.getElementById('selectedFileName');
 const loadingEl = document.getElementById('loading');
+const loadingMessage = document.getElementById('loadingMessage');
+const problemTextContainer = document.getElementById('problemTextContainer');
 const stepsContainer = document.getElementById('stepsContainer');
 const instructionsContainer = document.getElementById('instructionsContainer');
 const metaContainer = document.getElementById('metaContainer');
@@ -16,6 +25,27 @@ const submitButton = uploadForm.querySelector('button[type="submit"]');
 
 controls.style.display = 'none';
 
+function syncInputMode() {
+  const isManual = manualMode.checked;
+  manualFields.hidden = !isManual;
+  imageFields.hidden = isManual;
+  manualText.disabled = !isManual;
+  fileInput.disabled = isManual;
+  submitButton.textContent = isManual ? '解析文字并生成动画' : '上传图片并生成动画';
+  showError('');
+}
+
+manualMode.addEventListener('change', syncInputMode);
+imageMode.addEventListener('change', syncInputMode);
+exampleButton.addEventListener('click', () => {
+  manualText.value = '一个物体从8米高的平台以10m/s的速度水平抛出，g=9.8m/s²，求运动轨迹。';
+  manualText.focus();
+});
+fileInput.addEventListener('change', () => {
+  selectedFileName.textContent = fileInput.files[0]?.name || '';
+});
+syncInputMode();
+
 function setLoading(isLoading) {
   loadingEl.style.display = isLoading ? 'flex' : 'none';
   submitButton.disabled = isLoading;
@@ -29,6 +59,10 @@ function showError(message) {
   }
   errorBox.textContent = message;
   errorBox.style.display = 'block';
+}
+
+function renderProblemText(problemText) {
+  problemTextContainer.textContent = problemText || '未获取到题目文本。';
 }
 
 function renderSteps(steps) {
@@ -76,7 +110,6 @@ function renderMeta(data) {
 
   const items = [
     ['题目类型', data.problem_type || '未知'],
-    ['OCR 预览', data.ocr_text ? `${data.ocr_text.slice(0, 80)}${data.ocr_text.length > 80 ? '…' : ''}` : '无'],
   ];
 
   if (data.parameters && typeof data.parameters === 'object') {
@@ -138,68 +171,84 @@ function resetCanvas() {
   controls.style.display = 'none';
 }
 
-uploadForm.addEventListener('submit', (event) => {
+uploadForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const file = fileInput.files[0];
-  if (!file) {
-    showError('请选择一张图片再上传');
-    return;
-  }
-
   const formData = new FormData();
-  formData.append('file', file);
+  if (manualMode.checked) {
+    const text = manualText.value.trim();
+    if (!text) {
+      showError('请输入物理题目，或点击“填入示例题目”。');
+      return;
+    }
+    formData.append('manual_text', text);
+    loadingMessage.textContent = '正在用规则解析题目，请稍候...';
+  } else {
+    const file = fileInput.files[0];
+    if (!file) {
+      showError('请选择一张 PNG 或 JPG 图片再上传。');
+      return;
+    }
+    formData.append('file', file);
+    loadingMessage.textContent = '正在调用 Claude 解析图片，请稍候...';
+  }
 
   showError('');
   setLoading(true);
   resetCanvas();
+  problemTextContainer.textContent = '';
   stepsContainer.textContent = '';
   instructionsContainer.textContent = '';
   metaContainer.textContent = '';
 
-  fetch('/upload', {
-    method: 'POST',
-    body: formData,
-  })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(`上传失败，状态码：${response.status}`);
-      }
-      return response.json();
-    })
-    .then((data) => {
-      setLoading(false);
-      renderSteps(data.solution_steps || data.steps);
-      renderInstructions(data.animation_instructions);
-      renderMeta(data);
+  try {
+    const response = await fetch('/upload', { method: 'POST', body: formData });
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error(`服务器返回无法读取的响应（HTTP ${response.status}）。`);
+    }
+    if (!response.ok) {
+      throw new Error([data.message || `请求失败（HTTP ${response.status}）`, data.suggestion].filter(Boolean).join('。'));
+    }
+    if (!data || typeof data.problem_text !== 'string' ||
+        typeof data.problem_type !== 'string' ||
+        !Array.isArray(data.solution_steps) ||
+        !data.animation_instructions ||
+        typeof data.animation_instructions !== 'object' ||
+        Array.isArray(data.animation_instructions)) {
+      throw new Error('服务器响应格式不正确，请检查后端日志。');
+    }
 
-      const animationData = normalizeAnimationData(data.animation_instructions);
-      if (!animationData) {
-        showError('后端未返回可用的动画数据，已跳过动画演示。');
-        return;
-      }
+    renderProblemText(data.problem_text);
+    renderSteps(data.solution_steps);
+    renderInstructions(data.animation_instructions);
+    renderMeta(data);
 
-      try {
-        // 单例模式：首次创建，后续重用
-        if (!engine) {
-          engine = new AnimationEngine(canvas);
-          bindControls(engine);
-          console.log('[Main] 动画引擎已创建（单例）');
-        } else {
-          // 重用已有实例：先销毁旧动画，再加载新动画
-          engine.destroy();
-          console.log('[Main] 重用动画引擎（销毁旧动画）');
-        }
+    const animationData = normalizeAnimationData(data.animation_instructions);
+    if (!animationData) {
+      showError('后端未返回可用的动画数据，已跳过动画演示。');
+      return;
+    }
 
-        engine.loadInstructions(animationData);
-        engine.play();
-      } catch (err) {
-        console.error('动画初始化失败:', err);
-        showError(`动画初始化失败: ${err.message}`);
+    try {
+      // 单例模式：首次创建，后续重用
+      if (!engine) {
+        engine = new AnimationEngine(canvas);
+        bindControls(engine);
+      } else {
+        engine.destroy();
       }
-    })
-    .catch((error) => {
-      console.error(error);
-      setLoading(false);
-      showError(`很抱歉，解析失败，请重试。错误信息: ${error.message}`);
-    });
+      engine.loadInstructions(animationData);
+      engine.play();
+    } catch (err) {
+      console.error('动画初始化失败:', err);
+      showError(`动画初始化失败：${err.message}`);
+    }
+  } catch (error) {
+    console.error(error);
+    showError(`解析失败：${error.message}`);
+  } finally {
+    setLoading(false);
+  }
 });

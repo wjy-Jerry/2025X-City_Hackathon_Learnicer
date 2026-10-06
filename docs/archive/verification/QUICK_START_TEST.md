@@ -233,10 +233,10 @@
 
 ## 📁 相关文档
 
-- **API 文档**: `ANIMATION_API.md`
-- **验证指南**: `ANIMATION_TEST.md`
+- **API 文档**: `../../ANIMATION_API.md`
+- **验证指南**: `../animation/ANIMATION_TEST.md`
 - **审计报告**: `ANIMATION_AUDIT_REPORT.md`
-- **自动化测试脚本**: `test_animation_merge.js`
+- **自动化测试脚本**: `../../../tests/browser/test_animation_merge.js`
 
 ---
 
@@ -264,7 +264,7 @@
 
 2. **通知团队**
    - 告知 A 同学和 C 同学合并已完成
-   - 分享 `ANIMATION_API.md` 文档
+   - 分享 `../../ANIMATION_API.md` 文档
    - 说明前端代码无需修改
 
 3. **后续优化**
