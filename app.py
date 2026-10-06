@@ -4,9 +4,6 @@ from config import Config
 from routes.upload import upload_bp
 
 def create_app():
-    # 兼容性环境变量（建议在导入 PaddleOCR 前设置）
-    os.environ.setdefault("HUB_DATASET_ENDPOINT", Config.HUB_DATASET_ENDPOINT)
-
     app = Flask(__name__)
     app.config.from_object(Config)
 

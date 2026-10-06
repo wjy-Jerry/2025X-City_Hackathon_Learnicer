@@ -22,7 +22,7 @@ python -m pytest -q --cov=app --cov=routes.upload --cov=services.claude_pipeline
 node --test tests/browser/*.test.js
 ```
 
-GitHub Actions runs these tests plus Python and JavaScript syntax checks on every push and pull request. It verifies the no-key manual upload, response contract, physics assumptions and warnings, and browser/renderer behavior. No paid API credential is used. See [supported tests and legacy exclusions](docs/testing.md); the historical `tools/test_ocr.py` is outside this CI suite.
+GitHub Actions runs these tests plus Python and JavaScript syntax checks on every push and pull request. It verifies the no-key manual upload, response contract, physics assumptions and warnings, and browser/renderer behavior. No paid API credential is used. See [supported tests](docs/testing.md) and the [current architecture](docs/architecture.md).
 
 ## 📋 Table of Contents
 - [安全配置说明](#安全配置说明)
@@ -424,29 +424,9 @@ curl -X POST http://127.0.0.1:5000/upload \
 
 ---
 
-## Migration Notes
+## Historical implementation notes
 
-### 从 Mathpix OCR 迁移到 Claude 多模态 Pipeline（2025-12-28）
-
-**主要变更：**
-1. **OCR + 解析一体化**：移除 Mathpix OCR，改用 Claude API 多模态能力（同时完成 OCR + 题目解析 + 动画指令生成）
-2. **简化依赖**：移除 Mathpix 相关依赖，保留 `anthropic`, `Flask`, `Pillow`
-3. **环境变量调整**：
-   - 移除：`MATHPIX_APP_ID`, `MATHPIX_APP_KEY`, `OCR_MODE`
-   - 新增：`PIPELINE_MODE=claude|manual`
-   - 保留：`CLAUDE_API_KEY`, `CLAUDE_MODEL`
-4. **Manual 模式增强**：必须提供 `manual_text`，使用规则引擎解析（不再生成 hash 测试文本）
-5. **新增 `/pipeline/status` 接口**，移除 `/ocr/status`
-
-**兼容性：**
-- `/upload` 接口保持不变
-- 响应 JSON 格式保持不变（`problem_type`, `problem_text`, `solution_steps`, `animation_instructions`）
-- `manual_text` 参数继续支持（且在 manual 模式下必需）
-
-**迁移步骤：**
-1. 更新 `.env`：移除 Mathpix 配置，添加 `PIPELINE_MODE=manual`（测试）或配置 `CLAUDE_API_KEY`（生产）
-2. 测试 manual 模式：`export PIPELINE_MODE=manual && curl -X POST http://127.0.0.1:5000/upload -F "manual_text=..."`
-3. 测试 claude 模式：`export PIPELINE_MODE=claude && curl -X POST http://127.0.0.1:5000/upload -F "file=@test.jpg"`
+Older pipeline migration records are kept under [`docs/archive/`](docs/archive/). They document previous implementations and are not setup instructions for the current application.
 
 ---
 

@@ -1,7 +1,5 @@
-import os
 import logging
 from flask import Blueprint, request, jsonify, current_app
-from werkzeug.utils import secure_filename
 
 from services.claude_pipeline import process_image, get_pipeline_status
 
@@ -19,9 +17,7 @@ def upload():
     """
     接收题目图片 -> Claude 多模态 Pipeline (OCR + 解析 + 动画指令) -> 返回统一 JSON
 
-    支持两种模式（通过环境变量 PIPELINE_MODE 控制）：
-    1. claude: 使用 Claude API 多模态能力（需要上传图片）
-    2. manual: 使用手动文本输入（需要提供 manual_text 参数）
+    输入类型决定处理路径：图片使用 Claude；manual_text 使用本地规则解析。
 
     请求参数：
     - file: 图片文件（claude 模式必需）
@@ -65,21 +61,8 @@ def upload():
                     "details": str(e)
                 }), 500
 
-    # 3. 检查参数完整性并智能选择 Pipeline
-    pipeline_mode = os.environ.get("PIPELINE_MODE", "claude").lower()
-
-    # 智能模式选择：
-    # - 如果提供了 manual_text，优先使用 manual pipeline（无论配置如何）
-    # - 如果只提供了图片，根据 PIPELINE_MODE 选择
-    if manual_text:
-        # 有 manual_text，强制使用 manual pipeline
-        actual_mode = "manual"
-        logger.info("检测到 manual_text，使用 manual pipeline")
-    elif image_bytes:
-        # 有图片，使用配置的模式
-        actual_mode = pipeline_mode
-        logger.info(f"检测到图片上传，使用 {actual_mode} pipeline")
-    else:
+    # 3. 输入由 process_image 根据实际内容分派；manual_text 优先于图片。
+    if not manual_text and not image_bytes:
         # 什么都没有，返回错误
         return jsonify({
             "error": "missing_input",
@@ -88,14 +71,6 @@ def upload():
                 "claude_mode": "curl -X POST .../upload -F 'file=@image.jpg'",
                 "manual_mode": "curl -X POST .../upload -F 'manual_text=题目文本'"
             }
-        }), 400
-
-    # 验证必要参数
-    if actual_mode == "claude" and not image_bytes:
-        return jsonify({
-            "error": "missing_file",
-            "message": "claude 模式需要上传图片文件",
-            "suggestion": "请上传图片，或提供 manual_text 参数"
         }), 400
 
     # 4. 调用 Claude Pipeline 或 Manual Pipeline

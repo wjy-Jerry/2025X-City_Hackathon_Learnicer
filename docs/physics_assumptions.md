@@ -1,6 +1,6 @@
 # Phase 3 physics default audit
 
-Scope: active Claude/manual upload pipeline, browser response handling, animation adapter and renderer constructors. Legacy OCR/LLM services are retained unchanged for the later architecture phase. No motion types were added.
+Scope: active Claude/manual upload pipeline, browser response handling, animation adapter and renderer constructors. This is the Phase 3 audit; the legacy OCR/LLM services described below were removed in Phase 5. No motion types were added.
 
 ## Physics defaults found
 
@@ -47,7 +47,7 @@ Stopping at canvas boundaries and frame stepping remain renderer limitations. Th
 
 ## Legacy services and fixtures
 
-`services/llm_service.py` remains outside `/upload`. It still has gravity 9.8, speeds 5/10/15/20, angles 0/45/90, heights 0/8/10, a 5-second uniform window, 2-second fallback, minimum 0.5-second flight time, default projectile classification and a fabricated range of 10 used for scale. Its old explanation labels zero speed/angle as “default”. `services/ocr_service.py` still contains mock sample text for its legacy mock path. Neither service was edited or removed. Their remaining defaults prevent claiming that every legacy helper in the repository is safe for production.
+The following audit documented defaults in separate OCR and text-analysis experiments at the time of Phase 3. Those paths were removed in Phase 5; the removal record is [archived here](archive/pipeline/PHASE5_LEGACY_REMOVAL.md).
 
 Explicit sample values in test pages and console fixtures are intentional examples, not values extracted from a user's problem. Fixtures that depended on hidden initial height/x/phase now provide them explicitly; the impossible circular fixture expects rejection. Vendored Matter.js defaults are library behavior used by a standalone test canvas, not the main upload animation engine; vendor files were not edited.
 
@@ -63,4 +63,4 @@ node --test tests/browser/*.test.js
 python scripts/self_check.py                # Live Claude test skips without a key
 ```
 
-The supported suite is described in [testing.md](testing.md). `scripts/quick_test.py` and `scripts/test_dynamic_response.py` cover legacy OCR/LLM behavior and are not CI gates. `tools/test_ocr.py` has a pre-existing import failure (`get_ocr_provider`); it remains unchanged for the later legacy cleanup phase. Live Claude image recognition requires a key and is not part of no-key verification.
+The supported suite is described in [testing.md](testing.md). The former legacy diagnostic scripts and broken OCR tool were removed in Phase 5. Live Claude image recognition requires a key and is not part of no-key verification.

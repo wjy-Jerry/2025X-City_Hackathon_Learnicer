@@ -2,8 +2,10 @@
 
 import io
 import json
+import base64
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -119,6 +121,42 @@ def test_image_upload_without_key_fails_readably(client, monkeypatch):
     assert data["error"] == "pipeline_failed"
     assert data["message"]
     assert data["suggestion"]
+
+
+def test_image_upload_targets_claude_and_returns_validated_contract(client, monkeypatch):
+    """Exercise the image branch without making a paid or network API call."""
+    monkeypatch.setenv("PIPELINE_MODE", "manual")
+    monkeypatch.setenv("CLAUDE_API_KEY", "test-placeholder")
+    image = b"\x89PNG\r\n\x1a\nplaceholder image"
+    model_reply = json.dumps({"problem_text": COMPLETE, "problem_type": "projectile"})
+    with patch("services.claude_pipeline.Anthropic") as anthropic:
+        anthropic.return_value.messages.create.return_value = SimpleNamespace(
+            content=[SimpleNamespace(text=model_reply)]
+        )
+        response = client.post("/upload", data={"file": (io.BytesIO(image), "problem.png")})
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["problem_text"] == COMPLETE
+    assert data["animation_instructions"]["initial_speed"] == 20
+    assert data["assumptions"] == []
+    assert data["warnings"] == []
+    call = anthropic.return_value.messages.create.call_args
+    assert call.kwargs["max_tokens"] == 4096
+    image_source = call.kwargs["messages"][0]["content"][0]["source"]
+    assert image_source["media_type"] == "image/png"
+    assert base64.b64decode(image_source["data"]) == image
+
+
+def test_manual_text_takes_precedence_over_an_uploaded_image(client):
+    with patch("services.claude_pipeline.call_claude_pipeline", side_effect=AssertionError("API call")):
+        response = client.post("/upload", data={
+            "manual_text": COMPLETE,
+            "file": (io.BytesIO(b"placeholder image"), "problem.png"),
+        })
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["problem_text"] == COMPLETE
+    assert data["animation_instructions"]["initial_speed"] == 20
 
 
 def test_oversized_upload_is_rejected(client):

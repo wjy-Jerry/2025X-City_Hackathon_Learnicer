@@ -306,7 +306,7 @@ def call_claude_pipeline(image_source: Union[str, bytes, Path]) -> dict:
         raise RuntimeError(f"Claude Pipeline 失败: {e}")
 
 
-# ==================== Manual 模式（降级方案） ====================
+# ==================== Manual 文本解析路径 ====================
 
 def manual_pipeline(manual_text: str) -> dict:
     """Rule-based parsing; unavailable parameters stay unknown."""
