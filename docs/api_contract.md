@@ -107,7 +107,7 @@ Incomplete physics conditions are a successfully parsed request, not a transport
 
 The model extracts text, motion type, parameters and literal `parameter_evidence`. It is instructed to leave absent values null. The backend reparses recognized text and requires matching numeric evidence for additional supplied values. Unverifiable or conflicting values cause a warning and block animation. Model-supplied animation instructions are ignored; both input paths build instructions through the same validation/assumption policy. This does not independently guarantee image OCR accuracy.
 
-See [physics default audit](physics_assumptions.md) for removed defaults and the intentionally unchanged legacy path.
+See [physics default audit](physics_assumptions.md) for the validation policy and removed defaults.
 
 ## Error response (HTTP 4xx or 5xx)
 

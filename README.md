@@ -1,435 +1,123 @@
-# 2025X-City_Hackathon_Learnicer
+# Learnicer
+
+**Turn physics problems into step-by-step explanations and Canvas motion animations.**
 
 [![CI](https://github.com/wjy-Jerry/2025X-City_Hackathon_Learnicer/actions/workflows/ci.yml/badge.svg)](https://github.com/wjy-Jerry/2025X-City_Hackathon_Learnicer/actions/workflows/ci.yml)
 
-A Flask-based backend with **Claude API 多模态一体化 Pipeline**（同时完成 OCR + 题目解析 + 动画指令生成），plus a lightweight front-end (HTML/CSS/JS) that renders solution steps and Canvas animations.
+Enter a problem as text and explore its solution and trajectory in the browser. The manual mode runs locally with no API key; an optional image mode uses Claude to read and analyze a photographed problem. Both paths return the same response shape, including visible assumptions and warnings when physics inputs are incomplete.
 
-## Tech Stack
-- Backend: Flask
-- AI Pipeline: **Claude API** (多模态，一次性完成 OCR + 解析 + 动画指令)
-- Frontend: HTML/CSS/JavaScript + Canvas
+## Demo
 
-## No-key browser demo
+The screenshots below were captured from the running, key-free manual browser demo using the built-in horizontal-launch example.
 
-Install dependencies with `pip install -r requirements.txt`, run `python app.py`, and open `http://127.0.0.1:5000/`. The page starts in **手动输入（无需 API Key）** mode. Click **填入示例题目**, then **解析文字并生成动画** to see the returned problem text, solution steps, and animation. This mode uses rule-based text parsing; it does **not** call OCR or Claude. No `.env` file or API key is required. Image upload remains available after configuring `CLAUDE_API_KEY`.
+**1. Enter a problem (or load the example).**
 
-## Tests and CI
+![Manual physics problem input in Learnicer](docs/assets/01-manual-input.png)
 
-Install test dependencies with `python -m pip install -r requirements-dev.txt`, then run:
+**2. Read the solution and the assumptions used.**
+
+![Generated solution steps and explicit assumptions](docs/assets/02-solution-steps.png)
+
+**3. Play or replay the Canvas animation.**
+
+![Canvas animation of the horizontal-launch trajectory](docs/assets/03-canvas-animation.png)
+
+The current interface is in Chinese. [Run the demo locally](#quick-start-no-api-key) to try it yourself.
+
+## Why Learnicer
+
+A solved equation can be hard to connect to physical motion. Learnicer places the problem text, ordered reasoning, and a playable trajectory in one view. When a required value is missing, it shows a warning instead of presenting an invented animation as fact.
+
+## How it works
+
+1. Choose **manual text** or **image upload** in the browser.
+2. Manual text goes to a local rule-based parser. An image goes to Claude's multimodal pipeline and requires an API key.
+3. The backend validates physics parameters and returns `problem_text`, `solution_steps`, `assumptions`, `warnings`, and nullable `animation_instructions`.
+4. The page displays the explanation and, when the inputs support it, renders the selected motion on Canvas.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    B[Browser] -->|Manual text| M[Rule-based physics parser]
+    B -->|Image| C[Claude multimodal pipeline]
+    M --> R[Unified validated response]
+    C --> R
+    R --> S[Solution steps and assumptions / warnings]
+    R --> A[Canvas animation when parameters are sufficient]
+```
+
+See the [architecture notes](docs/architecture.md) for dispatch, validation, and module details.
+
+## Key engineering features
+
+- **One response contract:** manual and image inputs feed the same validated result shape, which the frontend handles even when animation instructions are null.
+- **Explicit physics assumptions:** conventional choices such as Earth gravity are reported. Missing essential speed, angle, or height blocks a misleading animation.
+- **Useful without a key:** the browser's manual mode parses supported problems locally and includes an example.
+- **Image analysis:** Claude can extract and analyze a problem from an uploaded image; the backend validates extracted parameters before building animation instructions.
+- **Automated checks:** pytest covers the supported Flask workflow and physics contract; Node tests cover frontend and renderer behavior; GitHub Actions runs both on pushes and pull requests.
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Backend | Python, Flask |
+| Optional image analysis | Anthropic Claude API |
+| Frontend | HTML, CSS, JavaScript, Canvas |
+| Verification | pytest, pytest-cov, Node test runner, GitHub Actions |
+
+## Quick start: no API key
+
+Python 3.13 and a modern browser are sufficient for the manual demo. Node.js 24 is used for the browser contract tests.
 
 ```bash
+git clone https://github.com/wjy-Jerry/2025X-City_Hackathon_Learnicer.git
+cd 2025X-City_Hackathon_Learnicer
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python app.py
+```
+
+On Windows PowerShell, run `.venv\Scripts\Activate.ps1` in place of the `source` line.
+
+Open **http://127.0.0.1:5000/**. Leave **手动输入（无需 API Key）** selected, click **填入示例题目** to load the example, then **解析文字并生成动画**. The page shows the solution, assumptions, and animation. Manual mode does not call OCR or Claude.
+
+### Optional: analyze an image with Claude
+
+Set `CLAUDE_API_KEY` in your environment or in a local `.env` file (see [`.env.example`](.env.example)), restart the app, and select **图片上传（Claude）**. The key is needed only for image analysis. Do not commit your `.env` file.
+
+## Testing and CI
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m compileall -q app.py config.py routes/upload.py services/claude_pipeline.py tests/backend
 python -m pytest -q --cov=app --cov=routes.upload --cov=services.claude_pipeline --cov-report=term-missing
 node --test tests/browser/*.test.js
 ```
 
-GitHub Actions runs these tests plus Python and JavaScript syntax checks on every push and pull request. It verifies the no-key manual upload, response contract, physics assumptions and warnings, and browser/renderer behavior. No paid API credential is used. See [supported tests](docs/testing.md) and the [current architecture](docs/architecture.md).
+GitHub Actions also checks JavaScript syntax and runs separate backend and browser/renderer jobs on every push and pull request. The supported Python application modules currently have **80% test coverage**. CI uses no paid API key: Claude calls are mocked, so these checks do not verify a live image request or a full end-to-end browser session. See [testing details](docs/testing.md).
 
-## 📋 Table of Contents
-- [安全配置说明](#安全配置说明)
-- [Requirements](#requirements)
-- [Quick Start](#quick-start)
-- [OCR 配置](#ocr-配置)
-- [测试接口](#测试接口)
-- [支持的运动类型](#支持的运动类型)
-- [故障排查](#故障排查)
+## My contributions and the team project
 
----
+**Original hackathon project:** This was built by a three-person team. I contributed to rapid prototype development, worked on the Claude-powered processing workflow, implemented application work using Flask, HTML/CSS, and JavaScript Canvas, and led the final product demonstration and presentation.
 
-## ⚠️ 安全配置说明
+**Later portfolio engineering in this repository:** After the hackathon, the repository was cleaned up, the key-free browser demo and unified response contract were completed, physics assumptions were made explicit, an automated test suite and CI were added, and obsolete OCR/LLM paths were removed. These are later repository improvements, not claims about the original hackathon submission.
 
-**本项目采用环境变量管理所有敏感配置（API Key、密钥等），确保安全性和团队协作友好性。**
+## Limitations
 
-### 图片模式配置（手动浏览器演示无需此步骤）
+- The manual rule-based parser handles a limited set of physics problems, and the Canvas renderer supports selected motion types.
+- Image analysis needs Claude API access. CI mocks that service rather than making paid live calls.
+- Generated explanations and recognized image text should be checked against the original problem before relying on them.
 
-```bash
-# 1. 复制配置模板
-cp .env.example .env
+## Project background
 
-# 2. 编辑 .env 文件，填入 Claude API Key
-vi .env  # 或 nano .env，或 code .env
+Learnicer began as a three-person project at the **2025 X-City Hackathon**, where the team received **Third Prize**. This repository also includes subsequent work to make the prototype easier to run, review, and maintain.
 
-# 3. 填入 Claude API Key
-# CLAUDE_API_KEY=your_claude_api_key
-```
+## Documentation
 
-### 重要规则
-
-1. **绝不提交 `.env` 到 Git** - 已被 `.gitignore` 自动忽略
-2. **只提交 `.env.example`** - 仅包含占位符，无真实密钥
-3. **无需修改源代码** - 所有配置通过环境变量读取
-4. **支持降级运行** - 未配置 API Key 时可使用 manual 模式
-
-### 配置项说明
-
-| 配置项 | 必需性 | 默认值 | 说明 |
-|--------|--------|--------|------|
-| `CLAUDE_API_KEY` | claude 模式必需 | 无 | Claude API 密钥 |
-| `CLAUDE_MODEL` | 可选 | `claude-3-5-sonnet-20241022` | Claude 模型名称 |
-| `PIPELINE_MODE` | 可选 | `claude` | Pipeline 模式（`claude`/`manual`） |
-
-### 获取 API Key
-
-#### Claude API Key
-
-1. 访问 [Anthropic Console](https://console.anthropic.com/)
-2. 注册/登录账号
-3. 创建 API Key
-4. 复制到 `.env` 文件中的 `CLAUDE_API_KEY=`
-
-### 无 API Key 也能运行（Manual 模式）
-
-如果不配置 Claude API Key，直接在网页选择手动输入即可；提交 `manual_text` 会自动使用规则解析。命令行测试也可以显式设置：
-
-```bash
-export PIPELINE_MODE=manual
-```
-
-manual 模式特性：
-- 支持通过 `manual_text` 参数直接传入题目文本
-- 使用规则引擎解析题目（不调用 Claude API）
-- 不同输入会产生不同的输出（避免硬编码）
-- 适用于团队联调、CI、无 Key/离线测试场景
-
----
-
-## Requirements
-
-- Python: 3.8+
-- pip: 20.2.2+
-- 稳定的网络连接（仅图片模式调用 Claude API 时需要）
-
----
-
-## Quick Start
-
-### 1) 创建并激活虚拟环境
-
-**macOS / Linux:**
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-```
-
-**Windows (PowerShell):**
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-```
-
-### 2) 安装依赖
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3) 配置环境变量
-
-仅图片上传模式需要以下配置；手动输入模式可跳过：
-
-```bash
-# 复制配置模板
-cp .env.example .env
-
-# 编辑 .env 文件，填入 Claude API Key
-# CLAUDE_API_KEY=your_api_key
-```
-
-### 4) 启动后端
-
-```bash
-python app.py
-```
-
-或使用 Flask CLI：
-
-```bash
-flask --app app run --debug
-```
-
-打开 `http://127.0.0.1:5000/`，默认选择手动输入模式，可直接填入示例题目体验完整浏览器流程。
-
-### 5) 验证后端运行（健康检查）
-
-```bash
-curl http://127.0.0.1:5000/health
-```
-
-预期响应：
-```json
-{"status":"ok"}
-```
-
-### 6) 检查 Pipeline 状态
-
-```bash
-curl http://127.0.0.1:5000/pipeline/status
-```
-
-预期响应（claude 模式且已配置）：
-```json
-{
-  "mode": "claude",
-  "claude_configured": true,
-  "error": null
-}
-```
-
----
-
-## Pipeline 配置
-
-### Pipeline 模式说明
-
-本项目支持两种输入路径：提交 `manual_text` 使用本地规则解析，提交图片使用 Claude。`PIPELINE_MODE` 用于状态展示和命令行配置；网页通过选中的输入方式决定实际处理路径。
-
-#### 1. Claude 模式（默认，推荐）
-
-```bash
-export PIPELINE_MODE=claude
-export CLAUDE_API_KEY=your_api_key
-```
-
-**特点：**
-- ✅ Claude 多模态一体化：OCR + 题目解析 + 动画指令生成一次完成
-- ✅ 识别准确率高，支持数学公式、手写体、中英混合
-- ✅ 智能提取物理参数和生成解题步骤
-- ✅ 自动计算动画参数（duration, scale 等）
-- ⚠️ 需要网络连接
-- ⚠️ 需要 Claude API Key（访问 console.anthropic.com 获取）
-
-#### 2. Manual 模式（测试/无 Key 场景）
-
-```bash
-export PIPELINE_MODE=manual
-```
-
-**特点：**
-- ✅ 无需 API Key
-- ✅ 支持通过 `manual_text` 参数直接传入题目文本
-- ✅ 使用规则引擎解析（正则表达式提取参数）
-- ✅ 不同输入会产生不同的输出（避免硬编码）
-- ✅ 适用于团队联调、CI、无 Key/离线测试
-- ⚠️ 不调用真实 OCR
-- ⚠️ 仅上传图片仍会走 Claude 路径，不能用图片离线体验
-
-**使用方式：**
-
-```bash
-# Manual 模式：直接提供题目文本
-export PIPELINE_MODE=manual
-
-curl -X POST http://127.0.0.1:5000/upload \
-  -F "manual_text=一个物体从10米高处以15m/s的初速度水平抛出，g=9.8m/s²，求运动轨迹。"
-```
-
----
-
-## 测试接口
-
-### 方式 1：Claude 模式 + 图片上传（完整流程）
-
-```bash
-# 确保已配置 CLAUDE_API_KEY
-export PIPELINE_MODE=claude
-
-curl -X POST http://127.0.0.1:5000/upload \
-  -F "file=@test_image.jpg"
-```
-
-### 方式 2：Manual 模式 + 手动输入文本
-
-```bash
-export PIPELINE_MODE=manual
-
-curl -X POST http://127.0.0.1:5000/upload \
-  -F "manual_text=一个物体从8米高的平台以10m/s的速度水平抛出，重力加速度g=9.8m/s²，求物体的运动轨迹。"
-```
-
-### 测试样例
-
-#### 样例 1：平抛运动
-
-```bash
-curl -X POST http://127.0.0.1:5000/upload \
-  -F "manual_text=一个物体从8米高的平台以10m/s的速度水平抛出，重力加速度g=9.8m/s²，求物体的运动轨迹。"
-```
-
-预期返回包含：
-```json
-{
-  "problem_type": "physics_horizontal_projectile",
-  "problem_text": "一个物体从8米高的平台以10m/s的速度水平抛出...",
-  "solution_steps": ["...", "..."],
-  "animation_instructions": {
-    "type": "projectile",
-    "initial_speed": 10,
-    "angle": 0,
-    "initial_y": 8,
-    "gravity": 9.8,
-    "duration": 1.28,
-    "scale": 20
-  }
-}
-```
-
-#### 样例 2：自由落体
-
-```bash
-curl -X POST http://127.0.0.1:5000/upload \
-  -F "manual_text=一个物体从12米高处自由下落，g=10m/s²，求下落时间和落地速度。"
-```
-
-预期返回包含：
-```json
-{
-  "problem_type": "physics_free_fall",
-  "animation_instructions": {
-    "type": "projectile",
-    "initial_speed": 0,
-    "angle": 90,
-    "initial_y": 12,
-    "gravity": 10
-  }
-}
-```
-
----
-
-## 支持的运动类型
-
-| 运动类型 | 关键词 | 动画类型 | 参数要求 |
-|---------|-------|---------|---------|
-| 平抛运动 | "平抛"、"水平抛" | projectile (angle=0) | 初速度、高度 |
-| 自由落体 | "自由落体"、"下落" | projectile (v0=0, angle=90) | 高度 |
-| 竖直上抛 | "竖直上抛"、"上抛" | projectile (angle=90) | 初速度 |
-| 斜抛运动 | "抛体"、"弹道" | projectile | 初速度、角度 |
-| 匀速直线 | "匀速" | uniform | 速度 |
-
----
-
-## 动画指令格式
-
-前端 `animation.js` 期待的 `animation_instructions` 格式：
-
-```json
-{
-  "type": "projectile",  // 或 "uniform"
-  "initial_speed": 10.0,  // m/s
-  "angle": 45,            // 度
-  "gravity": 9.8,         // m/s²
-  "initial_x": 0,         // 初始 x 坐标
-  "initial_y": 0,         // 初始 y 坐标（高度）
-  "duration": 2.5,        // 持续时间（秒）
-  "scale": 20             // 可视化缩放比例
-}
-```
-
----
-
-## 故障排查
-
-### Claude Pipeline 调用失败
-
-**问题：** `Claude API Key 未配置`
-
-**解决方案：**
-```bash
-# 检查环境变量是否设置
-echo $CLAUDE_API_KEY
-
-# 重新配置
-export CLAUDE_API_KEY=your_api_key
-
-# 或编辑 .env 文件
-vi .env
-```
-
-**问题：** `Claude API 返回错误（401/403）`
-
-**解决方案：**
-- 检查 API Key 是否有效（访问 console.anthropic.com）
-- 确认 Claude 账户是否有剩余额度
-- 确认使用的模型名称是否正确（默认：claude-3-5-sonnet-20241022）
-
-**问题：** `Claude API 请求超时`
-
-**解决方案：**
-- 检查网络连接
-- 尝试使用更小的图片（压缩后再上传）
-- 临时切换到 manual 模式：`export PIPELINE_MODE=manual`
-
-### OCR 识别不准确
-
-**问题：** Claude 未能正确识别题目文字或公式
-
-**解决方案：**
-1. 确保图片清晰且包含文字/数学公式
-2. 尝试提高图片分辨率或对比度
-3. 查看后端日志获取详细错误信息
-4. 使用 manual 模式手动输入题目文本：
-   ```bash
-   export PIPELINE_MODE=manual
-   curl -X POST http://127.0.0.1:5000/upload \
-     -F "manual_text=你的题目文本"
-   ```
-
-### 动画不显示
-
-**问题：** 前端动画未播放
-
-**解决方案：**
-- 打开浏览器控制台查看错误信息
-- 确认后端返回的 `animation_instructions` 字段包含所需参数
-- 检查 `type` 字段是否为 "projectile"、"uniform"、"free_fall" 或 "inclined_plane"
-- 验证参数值是否合理（例如 speed > 0, angle 在 0-360 之间）
-
-### Manual 模式返回错误
-
-**问题：** Manual 模式需要提供 manual_text 参数
-
-**解决方案：**
-```bash
-# Manual 模式必须提供题目文本
-export PIPELINE_MODE=manual
-
-curl -X POST http://127.0.0.1:5000/upload \
-  -F "manual_text=一个物体从10米高处以15m/s的初速度水平抛出，g=9.8m/s²"
-```
-
----
-
-## 前端使用
-
-打开浏览器访问 `http://127.0.0.1:5000/`，即可：
-
-1. 上传物理题图片（Claude 模式）或输入题目文本（Manual 模式）
-2. 查看 AI 识别/解析的题目文字
-3. 查看解题步骤
-4. 观看 Canvas 动画演示物理运动
-5. 使用播放/暂停/重播按钮控制动画
-
----
-
-## Team Workflow
-
-* 使用 `requirements.txt` 管理共享依赖
-* **绝不提交** `.venv/` 或 `.env` 到 Git
-* 如果添加依赖：
-  * `pip install <pkg>`
-  * 更新 `requirements.txt`（手动编辑推荐）
-
----
-
-## Historical implementation notes
-
-Older pipeline migration records are kept under [`docs/archive/`](docs/archive/). They document previous implementations and are not setup instructions for the current application.
-
----
-
-## License
-
-Hackathon project.
+- [Architecture](docs/architecture.md)
+- [API response contract](docs/api_contract.md)
+- [Physics assumptions and validation](docs/physics_assumptions.md)
+- [Supported tests](docs/testing.md)
+- [Historical notes](docs/archive/README.md) — archived context, not current setup instructions
